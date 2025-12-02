@@ -7,7 +7,7 @@ export function useChatWithPerplexity(initialRole) {
   const [isLoading, setIsLoading] = useState(false);
   const [currentRole, setCurrentRole] = useState(initialRole);
 
-  const sendMessage = async (input) => {
+  const sendMessage = async (input, jsonMode = false) => {
     if (!input.trim()) return;
 
     const userMessage = { role: 'user', content: input };
@@ -21,14 +21,21 @@ export function useChatWithPerplexity(initialRole) {
         body: JSON.stringify({
           message: input,
           history: messages,
-          role: currentRole
+          role: currentRole,
+          returnJson: jsonMode
         })
       });
 
-      if (!response.ok) throw new Error('Network error');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Network error');
+      }
 
       const data = await response.json();
-      const assistantMessage = { role: 'assistant', content: data.content };
+      const assistantMessage = { 
+        role: 'assistant', 
+        content: typeof data.content === 'string' ? data.content : JSON.stringify(data.content, null, 2)
+      };
       
       setMessages(prev => [...prev, assistantMessage]);
       localStorage.setItem('chatHistory', JSON.stringify([...messages, userMessage, assistantMessage]));
@@ -37,7 +44,7 @@ export function useChatWithPerplexity(initialRole) {
       console.error('Error:', error);
       setMessages(prev => [...prev, { 
         role: 'assistant', 
-        content: 'Извините, произошла ошибка.' 
+        content: `Ошибка: ${error.message}` 
       }]);
     } finally {
       setIsLoading(false);
@@ -51,7 +58,11 @@ export function useChatWithPerplexity(initialRole) {
   const loadHistory = () => {
     const saved = localStorage.getItem('chatHistory');
     if (saved) {
-      setMessages(JSON.parse(saved));
+      try {
+        setMessages(JSON.parse(saved));
+      } catch (e) {
+        console.error('Error loading history:', e);
+      }
     }
   };
 

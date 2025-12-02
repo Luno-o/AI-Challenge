@@ -10,6 +10,7 @@ const ROLE_PRESETS = {
 export default function ChatPage() {
   const [input, setInput] = useState('');
   const [activeRole, setActiveRole] = useState('default');
+  const [jsonMode, setJsonMode] = useState(false);
   const messagesEndRef = useRef(null);
   
   const { messages, isLoading, sendMessage, changeRole, loadHistory } = 
@@ -27,7 +28,7 @@ export default function ChatPage() {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
     
-    await sendMessage(input);
+    await sendMessage(input, jsonMode);
     setInput('');
   };
 
@@ -38,6 +39,15 @@ export default function ChatPage() {
 
   return (
     <div style={styles.container}>
+      <label style={styles.jsonToggle}>
+        <input 
+          type="checkbox" 
+          checked={jsonMode} 
+          onChange={(e) => setJsonMode(e.target.checked)} 
+        />
+        JSON режим
+      </label>
+
       <div style={styles.roleButtons}>
         {Object.keys(ROLE_PRESETS).map(key => (
           <button
@@ -65,7 +75,7 @@ export default function ChatPage() {
             }}
           >
             <strong>{msg.role === 'user' ? 'Вы:' : 'AI:'}</strong>
-            <div>{msg.content}</div>
+            <div style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</div>
           </div>
         ))}
         {isLoading && <div style={styles.thinking}>Thinking…</div>}
@@ -98,21 +108,31 @@ const styles = {
     margin: '0 auto',
     padding: '20px'
   },
+  jsonToggle: {
+    marginBottom: '10px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '5px',
+    cursor: 'pointer'
+  },
   roleButtons: {
     display: 'flex',
     gap: '10px',
-    marginBottom: '20px'
+    marginBottom: '20px',
+    flexWrap: 'wrap'
   },
   roleButton: {
     padding: '8px 16px',
     border: '1px solid #ddd',
     borderRadius: '6px',
     background: 'white',
-    cursor: 'pointer'
+    cursor: 'pointer',
+    fontSize: '14px'
   },
   activeRole: {
     background: '#007bff',
-    color: 'white'
+    color: 'white',
+    borderColor: '#007bff'
   },
   messagesContainer: {
     flex: 1,
@@ -120,7 +140,8 @@ const styles = {
     marginBottom: '20px',
     border: '1px solid #ddd',
     borderRadius: '8px',
-    padding: '15px'
+    padding: '15px',
+    background: '#fafafa'
   },
   message: {
     marginBottom: '15px',
@@ -137,7 +158,8 @@ const styles = {
   },
   thinking: {
     fontStyle: 'italic',
-    color: '#666'
+    color: '#666',
+    textAlign: 'center'
   },
   form: {
     display: 'flex',
@@ -156,6 +178,7 @@ const styles = {
     color: 'white',
     border: 'none',
     borderRadius: '6px',
-    cursor: 'pointer'
+    cursor: 'pointer',
+    fontSize: '16px'
   }
 };
