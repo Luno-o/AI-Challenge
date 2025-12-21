@@ -1,0 +1,35 @@
+[2025-12-21T18:26:31.794Z] list_containers: error | {"error":"connect ENOENT /var/run/docker.sock"}
+[2025-12-21T18:28:19.919Z] list_containers: error | {"error":"connect ENOENT /var/run/docker.sock"}
+[2025-12-21T18:36:18.290Z] list_containers: error | {"error":"connect ECONNREFUSED 127.0.0.1:2375"}
+[2025-12-21T18:39:29.793Z] list_containers: error | {"error":"connect ECONNREFUSED 127.0.0.1:2375"}
+[2025-12-21T18:50:43.885Z] create_test_env: error | {"error":"(HTTP code 404) no such container - No such image: postgres:16 "}
+[2025-12-21T18:52:21.334Z] create_test_env: success | {"postgres":"d252e414bd90","redis":"e674d4a66f7d"}
+[2025-12-21T18:53:15.276Z] stop_container: success | {"container":"e674d4a66f7d"}
+[2025-12-21T18:53:15.296Z] remove_container: success | {"container":"e674d4a66f7d"}
+[2025-12-21T18:53:15.568Z] stop_container: success | {"container":"d252e414bd90"}
+[2025-12-21T18:53:15.588Z] remove_container: success | {"container":"d252e414bd90"}
+[2025-12-21T18:53:15.593Z] stop_container: error | {"error":"(HTTP code 304) container already stopped -  "}
+[2025-12-21T18:53:15.615Z] remove_container: success | {"container":"17fa6141f75e"}
+[2025-12-21T19:04:30.285Z] create_test_env: success | {"postgres":"182cad35d57e","redis":"56c1380dc71a"}
+[2025-12-21T19:05:00.835Z] stop_container: success | {"container":"56c1380dc71a"}
+[2025-12-21T19:05:00.853Z] remove_container: success | {"container":"56c1380dc71a"}
+[2025-12-21T19:05:01.128Z] stop_container: success | {"container":"182cad35d57e"}
+[2025-12-21T19:05:01.144Z] remove_container: success | {"container":"182cad35d57e"}
+[2025-12-21T19:24:10.977Z] create_test_env: success | {"postgres":"e8ee15a4b671","redis":"9bbc894bb314"}
+[2025-12-21T19:36:14.576Z] create_test_env: error | {"error":"(HTTP code 500) server error - failed to set up container networking: driver failed programming external connectivity on endpoint test-postgres-1766345774207 (d695546316642d83969ecf9c9232d6b1ab2286b3589f5d544407bef4589b68ef): Bind for 0.0.0.0:5432 failed: port is already allocated "}
+[2025-12-21T19:38:00.324Z] stop_container: error | {"error":"(HTTP code 304) container already stopped -  "}
+[2025-12-21T19:38:00.342Z] remove_container: success | {"container":"fb5ac6d9318d"}
+[2025-12-21T19:38:00.646Z] stop_container: success | {"container":"9bbc894bb314"}
+[2025-12-21T19:38:00.662Z] remove_container: success | {"container":"9bbc894bb314"}
+[2025-12-21T19:38:00.941Z] stop_container: success | {"container":"e8ee15a4b671"}
+[2025-12-21T19:38:00.958Z] remove_container: success | {"container":"e8ee15a4b671"}
+[2025-12-21T19:38:20.948Z] create_test_env: success | {"postgres":"72cc4153bb5f","redis":"00e5cff56f53"}
+[2025-12-21T19:38:29.817Z] stop_container: success | {"container":"00e5cff56f53"}
+[2025-12-21T19:38:29.834Z] remove_container: success | {"container":"00e5cff56f53"}
+[2025-12-21T19:38:30.091Z] stop_container: success | {"container":"72cc4153bb5f"}
+[2025-12-21T19:38:30.106Z] remove_container: success | {"container":"72cc4153bb5f"}
+[2025-12-21T19:38:49.376Z] create_test_env: success | {"postgres":"604a5d99ef5b","redis":"dc4b36b2f247"}
+[2025-12-21T19:39:27.270Z] stop_container: success | {"container":"dc4b36b2f247"}
+[2025-12-21T19:39:27.288Z] remove_container: success | {"container":"dc4b36b2f247"}
+[2025-12-21T19:39:27.569Z] stop_container: success | {"container":"604a5d99ef5b"}
+[2025-12-21T19:39:27.584Z] remove_container: success | {"container":"604a5d99ef5b"}

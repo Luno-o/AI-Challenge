@@ -1,0 +1,32 @@
+{
+  "name": "perplexity-chat-server",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "mcp:task": "node task-mcp-server.js",
+    "mcp:github": "node github-mcp-server.js",
+    "mcp:docker": "node docker-mcp-server.js",
+    "mcp:all": "concurrently \"npm run mcp:task\" \"npm run mcp:github\" \"npm run mcp:docker\"",
+    "dev": "concurrently \"npm run mcp:all\" \"npm start\"",
+    "dev:frontend": "vite",
+    "test": "jest",
+    "test:docker": "jest src/tests/docker.test.js --verbose",
+    "test:watch": "jest --watch"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.6.0",
+    "axios": "^1.13.2",
+    "cors": "^2.8.5",
+    "dockerode": "^4.0.9",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "node-cron": "^3.0.3",
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.1",
+    "concurrently": "^8.2.2",
+    "jest": "^30.2.0"
+  }
+}
