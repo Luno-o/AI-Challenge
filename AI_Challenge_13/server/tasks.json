@@ -1,0 +1,31 @@
+{
+  "tasks": [
+    {
+      "id": "1766329220827",
+      "title": "Купить продукты",
+      "description": "",
+      "priority": "medium",
+      "status": "todo",
+      "createdAt": "2025-12-21T15:00:20.827Z",
+      "dueDate": null
+    },
+    {
+      "id": "1766329303444",
+      "title": "Позвонить врачу",
+      "description": "",
+      "priority": "medium",
+      "status": "todo",
+      "createdAt": "2025-12-21T15:01:43.444Z",
+      "dueDate": null
+    },
+    {
+      "id": "1766329397834",
+      "title": "Новая задача",
+      "description": "",
+      "priority": "medium",
+      "status": "todo",
+      "createdAt": "2025-12-21T15:03:17.834Z",
+      "dueDate": null
+    }
+  ]
+}
