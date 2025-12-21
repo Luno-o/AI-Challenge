@@ -1,4 +1,0 @@
-[submodule "server"]
-    path = server
-    url = https://github.com/Luno-o/AI-Challenge-server.git  # твой URL
-    ignore = dirty
