@@ -1,1 +1,94 @@
+# ===== NODE.JS =====
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# ===== ENVIRONMENT =====
 .env
+.env.local
+.env.*.local
+.env.production
+
+# ===== IDE & EDITOR =====
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+*.sublime-workspace
+*.sublime-project
+.editorconfig
+
+# ===== BUILD & DIST =====
+dist/
+build/
+.next/
+out/
+.nuxt/
+.cache/
+
+# ===== TESTING =====
+coverage/
+.nyc_output/
+test-results/
+junit.xml
+
+# ===== TEMPORARY =====
+tmp/
+temp/
+*.tmp
+*.log
+logs/
+
+# ===== OS =====
+.DS_Store
+.AppleDouble
+.LSOverride
+*.swp
+*.swo
+*~
+
+# ===== PROJECT SPECIFIC =====
+indexes/
+!indexes/.gitkeep
+documents/
+!documents/.example.md
+
+# ===== DEVELOPMENT =====
+.nodemon.json
+.pm2.json
+ecosystem.config.js
+
+# ===== DOCKER =====
+.dockerignore
+docker-compose.override.yml
+
+# ===== BACKUP =====
+*.backup
+*.bak
+*-backup/
+
+# ===== CREDENTIALS & SECRETS =====
+secrets.json
+.aws/
+.ssh/
+credentials.json
+
+# ===== VITE SPECIFIC =====
+.vite/
+vite-env.d.ts
+
+# ===== REACT SPECIFIC =====
+build/
+.cache/
+
+# ===== ARCHIVE FILES =====
+*.zip
+*.tar.gz
+*.rar
