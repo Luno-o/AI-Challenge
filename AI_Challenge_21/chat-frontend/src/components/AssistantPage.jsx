@@ -43,6 +43,31 @@ export default function AssistantPage() {
     setLoading(true);
 
     try {
+      // Проверка на GitHub PR команду
+      if (command.toLowerCase().includes('pull request') || 
+          command.toLowerCase().includes('pr') ||
+          command === '/pr') {
+        
+        const response = await fetch('/api/github/pulls');
+        const data = await response.json();
+
+        if (data.success) {
+          const prList = data.pulls.length > 0
+            ? data.pulls.map(pr => `**#${pr.number}** ${pr.title}\n- Author: ${pr.author}\n- ${pr.base} ← ${pr.head}`).join('\n\n')
+            : 'No pull requests found';
+
+          const assistantMsg = {
+            role: 'assistant',
+            content: `📋 **Pull Requests (${data.count}):**\n\n${prList}`,
+            timestamp: new Date().toLocaleTimeString()
+          };
+
+          setMessages(prev => [...prev, assistantMsg]);
+          return;
+        }
+      }
+
+      // Обычные Assistant команды (/help, /code, /review)
       const response = await fetch('/api/assistant/command', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -85,6 +110,7 @@ export default function AssistantPage() {
     { label: '📚 /help', cmd: '/help как работает RAG?' },
     { label: '📝 /code', cmd: '/code server/ragService.js' },
     { label: '🔍 /review', cmd: '/review' },
+    { label: '🔀 /pr', cmd: '/pr' },
     { label: '🌿 Branch', cmd: '/help текущая ветка' },
   ];
 
@@ -106,13 +132,11 @@ export default function AssistantPage() {
             <div className="msg-header">
               <span className="role">{msg.role === 'user' ? 'You' : 'Assistant'}</span>
               {msg.timestamp && <span className="timestamp">{msg.timestamp}</span>}
-              {msg.command && <span className="cmd-tag">/{msg.command}</span>}
+              {msg.command && <span className="cmd-tag">{msg.command}</span>}
             </div>
 
             <div className="msg-content">
-              {msg.content.split('\n').map((line, i) => (
-                <p key={i}>{line}</p>
-              ))}
+              {msg.content.split('\n').map((line, i) => <p key={i}>{line}</p>)}
             </div>
 
             {msg.code && (
@@ -124,10 +148,10 @@ export default function AssistantPage() {
 
             {msg.sources && msg.sources.length > 0 && (
               <div className="sources">
-                <strong>📚 Источники:</strong>
+                <strong>📚 Sources:</strong>
                 {msg.sources.map((src, i) => (
                   <div key={i} className="source-item">
-                    {src.file} [{src.score?.toFixed(2)}]
+                    {src.file} ({src.score?.toFixed(2)})
                   </div>
                 ))}
               </div>
@@ -162,12 +186,10 @@ export default function AssistantPage() {
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="/help <вопрос> | /code <file> | /review"
+          placeholder="/help | /code <file> | /review | /pr"
           disabled={loading}
         />
-        <button type="submit" disabled={loading || !input.trim()}>
-          Send
-        </button>
+        <button type="submit" disabled={loading || !input.trim()}>Send</button>
       </form>
     </div>
   );

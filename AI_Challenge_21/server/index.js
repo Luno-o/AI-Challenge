@@ -9,6 +9,8 @@ import { processAssistantCommand } from './assistantService.js';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
+// В AI_Challenge_21/server/index.js добавь:
+import { listPullRequests, getPullRequest } from './githubService.js';
 import { callDockerTool, listDockerTools } from './mcpClient.js';
 import {
   orchestrateSetupTestEnv,
@@ -68,7 +70,26 @@ app.get('/api/health', (req, res) => {
 
 
 
+// GitHub PR API
+app.get('/api/github/pulls', async (req, res) => {
+  try {
+    const { state = 'open' } = req.query;
+    const result = await listPullRequests(state);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 
+app.get('/api/github/pulls/:number', async (req, res) => {
+  try {
+    const { number } = req.params;
+    const result = await getPullRequest(parseInt(number));
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 
 
 // ✅ НОВЫЙ ENDPOINT: Assistant Commands
