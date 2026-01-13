@@ -4,7 +4,6 @@ import { execSync } from 'child_process';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import { reviewPullRequest } from './prReviewService.js';
-import { reviewPullRequest } from './prReviewService.js';
 import { initGitMcpClient } from './gitMcpClient.js';
 import { processAssistantCommand } from './assistantService.js';
 import fs from 'fs/promises';
@@ -104,7 +103,19 @@ app.options('*', cors());
 
 
 // ===== DOCUMENTS PIPELINE ROUTES =====
-
+app.post('/api/documents/reindex', async (req, res) => {
+  try {
+    const result = await callDocumentTool('index_documents', {
+      directory: './documents',
+      file_patterns: ['**/*.md'],
+      index_name: 'docs_index',
+      backend: 'simple'
+    });
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 // Get list of indexes
 // ✅ ИСПРАВЛЕННЫЙ ENDPOINT: Index documents from directory
 app.post('/api/documents/index', async (req, res) => {
