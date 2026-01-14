@@ -43,32 +43,84 @@ export default function AssistantPage() {
     setLoading(true);
 
     try {
-      // Проверка на GitHub PR команду
-      if (command.toLowerCase().includes('pull request') || 
-          command.toLowerCase().includes('pr') ||
-          command === '/pr') {
+      // Команда: /pr review <number>
+      const prReviewMatch = command.match(/\/pr\s+review\s+(\d+)/i);
+      if (prReviewMatch) {
+        const prNumber = prReviewMatch[1];
         
-        const response = await fetch('/api/github/pulls');
+const response = await fetch(`http://localhost:4000/api/pr/review/${prNumber}`, {
+  method: 'POST'  // ← Эта строка ДОЛЖНА быть!
+});
         const data = await response.json();
 
         if (data.success) {
-          const prList = data.pulls.length > 0
-            ? data.pulls.map(pr => `**#${pr.number}** ${pr.title}\n- Author: ${pr.author}\n- ${pr.base} ← ${pr.head}`).join('\n\n')
-            : 'No pull requests found';
+          let content = `## 🤖 PR #${data.pr.number} Review\n\n`;
+          content += `**Title:** ${data.pr.title}\n`;
+          content += `**Author:** ${data.pr.author}\n`;
+          content += `**URL:** ${data.pr.url}\n\n`;
+          content += `---\n\n`;
+          content += `### 📊 Summary\n\n${data.review.summary}\n\n`;
+          
+          if (data.review.fileReviews && data.review.fileReviews.length > 0) {
+            content += `### 📝 File Reviews (${data.review.filesCount} files)\n\n`;
+            data.review.fileReviews.slice(0, 5).forEach(fr => {
+              content += `#### 📄 ${fr.file} (${fr.status})\n\n${fr.review}\n\n---\n\n`;
+            });
+            
+            if (data.review.fileReviews.length > 5) {
+              content += `*... and ${data.review.fileReviews.length - 5} more files*\n\n`;
+            }
+          }
+          
+          content += `\n*Powered by RAG + Perplexity AI*`;
 
           const assistantMsg = {
             role: 'assistant',
-            content: `📋 **Pull Requests (${data.count}):**\n\n${prList}`,
+            content,
             timestamp: new Date().toLocaleTimeString()
           };
 
           setMessages(prev => [...prev, assistantMsg]);
           return;
+        } else {
+          throw new Error(data.error || 'PR review failed');
         }
       }
 
-      // Обычные Assistant команды (/help, /code, /review)
-      const response = await fetch('/api/assistant/command', {
+      // Команда: /pr (список PR)
+      if (command.toLowerCase() === '/pr' || 
+          command.toLowerCase().includes('pull request') ||
+          command.toLowerCase().includes('покажи pr')) {
+        
+        const response = await fetch('http://localhost:4000/api/github/pulls');
+        const data = await response.json();
+
+        if (data.success) {
+          const prList = data.pulls.length > 0
+            ? data.pulls.map(pr => 
+                `**#${pr.number}** ${pr.title}\n` +
+                `- 👤 Author: ${pr.author}\n` +
+                `- 🌿 ${pr.base} ← ${pr.head}\n` +
+                `- 🔗 ${pr.url}`
+              ).join('\n\n')
+            : 'No pull requests found';
+
+          const assistantMsg = {
+            role: 'assistant',
+            content: `📋 **Pull Requests (${data.count}):**\n\n${prList}\n\n` +
+                     `💡 *Use \`/pr review <number>\` to get AI analysis*`,
+            timestamp: new Date().toLocaleTimeString()
+          };
+
+          setMessages(prev => [...prev, assistantMsg]);
+          return;
+        } else {
+          throw new Error(data.error || 'Failed to fetch PRs');
+        }
+      }
+
+      // Остальные Assistant команды (/help, /code, /review)
+      const response = await fetch('http://localhost:4000/api/assistant/command', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ command })
@@ -92,6 +144,7 @@ export default function AssistantPage() {
       };
 
       setMessages(prev => [...prev, assistantMsg]);
+
     } catch (err) {
       console.error('Assistant error:', err);
       const errMsg = {
@@ -111,6 +164,7 @@ export default function AssistantPage() {
     { label: '📝 /code', cmd: '/code server/ragService.js' },
     { label: '🔍 /review', cmd: '/review' },
     { label: '🔀 /pr', cmd: '/pr' },
+    { label: '🤖 Review PR', cmd: '/pr review 1' },
     { label: '🌿 Branch', cmd: '/help текущая ветка' },
   ];
 
@@ -167,7 +221,14 @@ export default function AssistantPage() {
 
         {loading && (
           <div className="assistant-msg assistant loading">
-            <div className="msg-content">Analyzing...</div>
+            <div className="msg-content">
+              <div className="typing-indicator">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+              <p>Analyzing...</p>
+            </div>
           </div>
         )}
 
@@ -186,10 +247,12 @@ export default function AssistantPage() {
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="/help | /code <file> | /review | /pr"
+          placeholder="/help | /code <file> | /review | /pr | /pr review <number>"
           disabled={loading}
         />
-        <button type="submit" disabled={loading || !input.trim()}>Send</button>
+        <button type="submit" disabled={loading || !input.trim()}>
+          {loading ? '...' : 'Send'}
+        </button>
       </form>
     </div>
   );

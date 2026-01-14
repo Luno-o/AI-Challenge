@@ -9,7 +9,6 @@ import { processAssistantCommand } from './assistantService.js';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
-// В AI_Challenge_21/server/index.js добавь:
 import { listPullRequests, getPullRequest } from './githubService.js';
 import { callDockerTool, listDockerTools } from './mcpClient.js';
 import {
@@ -26,17 +25,13 @@ import {
   answerWithRerankedRag,
   compareRerank
 } from './ragService.js';
-import { callDocumentTool } from './ragMcpClient.js'; // ✅ Добавь в импорты
+import { callDocumentTool } from './ragMcpClient.js';
 
-
-// НОВОЕ (правильный порядок):
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Явно загружаем .env из текущей директории
 dotenv.config({ path: path.join(__dirname, '.env') });
 
-// Проверка загрузки
 if (!process.env.PERPLEXITY_API_KEY) {
   console.error('❌ PERPLEXITY_API_KEY not found in .env file!');
 } else {
@@ -46,7 +41,6 @@ if (!process.env.PERPLEXITY_API_KEY) {
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-
 let tokenStats = {
   totalPromptTokens: 0,
   totalCompletionTokens: 0,
@@ -54,13 +48,17 @@ let tokenStats = {
   requests: 0
 };
 
-// ✅ MIDDLEWARE (порядок важен!)
-app.use(cors());
-app.use(express.json({ limit: '10mb' }));  // увеличенный лимит для больших запросов
+// ✅ MIDDLEWARE
+app.use(cors({
+  origin: ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:5174', 'http://127.0.0.1:5173'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// ✅ MCP инициализация при старте
-
+// ✅ MCP initialization
 initGitMcpClient().catch(console.error);
 
 // ✅ HEALTH CHECK
@@ -68,9 +66,9 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// ========== PR REVIEW ENDPOINTS ==========
 
-
-// GitHub PR API
+// GET /api/github/pulls - список PR
 app.get('/api/github/pulls', async (req, res) => {
   try {
     const { state = 'open' } = req.query;
@@ -81,6 +79,7 @@ app.get('/api/github/pulls', async (req, res) => {
   }
 });
 
+// GET /api/github/pulls/:number - детали конкретного PR
 app.get('/api/github/pulls/:number', async (req, res) => {
   try {
     const { number } = req.params;
@@ -91,12 +90,64 @@ app.get('/api/github/pulls/:number', async (req, res) => {
   }
 });
 
+// POST /api/pr/review/:prNumber - AI review PR
+app.post('/api/pr/review/:prNumber', async (req, res) => {
+  try {
+    const { prNumber } = req.params;
+    console.log(`🔍 [API] Reviewing PR #${prNumber}...`);
 
-// ✅ НОВЫЙ ENDPOINT: Assistant Commands
+    // 1. Получаем PR info
+    const prInfo = await getPullRequest(parseInt(prNumber));
+    if (!prInfo.success) {
+      console.error(`❌ PR not found:`, prInfo.error);
+      return res.status(404).json({
+        success: false,
+        error: `PR #${prNumber} not found`
+      });
+    }
+
+    const pr = prInfo.pr;
+    console.log(`✅ Found PR: ${pr.title} (${pr.base} ← ${pr.head})`);
+
+    // 2. Запускаем review
+    const reviewResult = await reviewPullRequest(pr.base, pr.head);
+    if (!reviewResult.success) {
+      console.error(`❌ Review failed:`, reviewResult.error);
+      return res.status(500).json({
+        success: false,
+        error: reviewResult.error
+      });
+    }
+
+    console.log(`✅ Review completed for PR #${prNumber}`);
+
+    // 3. Возвращаем результат
+    res.json({
+      success: true,
+      pr: {
+        number: pr.number,
+        title: pr.title,
+        author: pr.author,
+        url: pr.url,
+        base: pr.base,
+        head: pr.head
+      },
+      review: reviewResult
+    });
+  } catch (error) {
+    console.error('❌ [API] PR review error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// ========== ASSISTANT ENDPOINT ==========
+
 app.post('/api/assistant/command', async (req, res) => {
   try {
     const { command } = req.body;
-
     if (!command || typeof command !== 'string') {
       return res.status(400).json({ error: 'command is required' });
     }
@@ -109,21 +160,8 @@ app.post('/api/assistant/command', async (req, res) => {
   }
 });
 
+// ========== DOCUMENTS PIPELINE ==========
 
-
-// ✅ FIXED CORS - Multiple origins support
-app.use(cors({
-  origin: ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:5174', 'http://127.0.0.1:5173'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  credentials: true,
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
-
-// Handle preflight requests
-app.options('*', cors());
-
-
-// ===== DOCUMENTS PIPELINE ROUTES =====
 app.post('/api/documents/reindex', async (req, res) => {
   try {
     const result = await callDocumentTool('index_documents', {
@@ -137,30 +175,23 @@ app.post('/api/documents/reindex', async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 });
-// Get list of indexes
-// ✅ ИСПРАВЛЕННЫЙ ENDPOINT: Index documents from directory
+
 app.post('/api/documents/index', async (req, res) => {
   try {
     const { directory, index_name, file_patterns, backend } = req.body;
-    
     if (!directory || !index_name) {
-      return res.status(400).json({ 
-        error: 'directory and index_name are required' 
+      return res.status(400).json({
+        error: 'directory and index_name are required'
       });
     }
 
     console.log(`📂 Indexing documents from ${directory}`);
-    console.log(`📋 Params:`, { directory, index_name, file_patterns, backend });
-
-    // ✅ Вызов через MCP
     const result = await callDocumentTool('index_documents', {
       directory,
       file_patterns: file_patterns || ['*.md', '*.txt'],
       index_name,
       backend: backend || 'json'
     });
-
-    console.log(`✅ Indexing result:`, result);
 
     if (result.success) {
       res.json({
@@ -179,22 +210,18 @@ app.post('/api/documents/index', async (req, res) => {
     } else {
       throw new Error(result.error || 'Indexing failed');
     }
-    
   } catch (error) {
     console.error('❌ Indexing error:', error.message);
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
+    res.status(500).json({
+      success: false,
+      error: error.message
     });
   }
 });
 
-
-// ✅ Get indexes endpoint
 app.get('/api/documents/indexes', async (req, res) => {
   try {
     const indexesDir = path.join(__dirname, 'indexes');
-    
     try {
       await fs.access(indexesDir);
     } catch {
@@ -208,7 +235,6 @@ app.get('/api/documents/indexes', async (req, res) => {
       try {
         const indexPath = path.join(indexesDir, file);
         const data = JSON.parse(await fs.readFile(indexPath, 'utf-8'));
-        
         indexes.push({
           name: data.name,
           file: file,
@@ -227,24 +253,19 @@ app.get('/api/documents/indexes', async (req, res) => {
   }
 });
 
-// ✅ Search endpoint
 app.post('/api/documents/search', async (req, res) => {
   try {
     const { query, index_name, top_k } = req.body;
-    
     if (!query) {
       return res.status(400).json({ error: 'query is required' });
     }
 
     console.log(`🔍 Searching "${query}" in index: ${index_name || 'docs_index'}`);
-
     const result = await callDocumentTool('search_in_index', {
       index_name: index_name || 'docs_index',
       query,
       top_k: top_k || 5
     });
-
-    console.log(`✅ Search result:`, result);
 
     if (result.success && result.results) {
       res.json({
@@ -263,238 +284,31 @@ app.post('/api/documents/search', async (req, res) => {
     } else {
       throw new Error(result.error || 'Search failed');
     }
-    
   } catch (error) {
     console.error('❌ Search error:', error.message);
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
+    res.status(500).json({
+      success: false,
+      error: error.message
     });
   }
 });
 
-// ===== TASK MANAGEMENT ROUTES =====
+// ========== CHAT ==========
 
-app.get('/api/tasks/tools', async (req, res) => {
-  try {
-    const tools = await listTaskTools();
-    res.json({ tools });
-  } catch (error) {
-    console.error('❌ List task tools error:', error.message);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.post('/api/tasks', async (req, res) => {
-  try {
-    const { title, description, priority, dueDate } = req.body;
-    const result = await callTaskTool('create_task', { title, description, priority, dueDate });
-    res.json(result);
-  } catch (error) {
-    console.error('❌ Create task error:', error.message);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.get('/api/tasks', async (req, res) => {
-  try {
-    const { status } = req.query;
-    const result = await callTaskTool('list_tasks', { status });
-    res.json(result);
-  } catch (error) {
-    console.error('❌ List tasks error:', error.message);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.patch('/api/tasks/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const updates = req.body;
-    const result = await callTaskTool('update_task', { id, ...updates });
-    res.json(result);
-  } catch (error) {
-    console.error('❌ Update task error:', error.message);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.delete('/api/tasks/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const result = await callTaskTool('delete_task', { id });
-    res.json(result);
-  } catch (error) {
-    console.error('❌ Delete task error:', error.message);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.get('/api/tasks/summary', async (req, res) => {
-  try {
-    const result = await callTaskTool('get_tasks_summary', {});
-    res.json(result);
-  } catch (error) {
-    console.error('❌ Tasks summary error:', error.message);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// ===== GITHUB TOOLS ROUTES =====
-
-app.get('/api/github/tools', async (req, res) => {
-  try {
-    const tools = await listGitHubTools();
-    res.json({ tools });
-  } catch (error) {
-    console.error('❌ List GitHub tools error:', error.message);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// ===== DOCKER TOOLS ROUTES =====
-
-app.get('/api/docker/tools', async (req, res) => {
-  try {
-    const tools = await listDockerTools();
-    res.json({ tools });
-  } catch (error) {
-    console.error('❌ List docker tools error:', error.message);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.get('/api/docker/containers', async (req, res) => {
-  try {
-    const result = await callDockerTool('list_containers', { all: true });
-    res.json(result);
-  } catch (error) {
-    console.error('❌ List containers error:', error.message);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.post('/api/docker/start', async (req, res) => {
-  try {
-    const { image, name, ports, env } = req.body;
-    const result = await callDockerTool('start_container', { image, name, ports, env });
-    res.json(result);
-  } catch (error) {
-    console.error('❌ Start container error:', error.message);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.post('/api/docker/stop/:container', async (req, res) => {
-  try {
-    const { container } = req.params;
-    const result = await callDockerTool('stop_container', { container });
-    res.json(result);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.delete('/api/docker/remove/:container', async (req, res) => {
-  try {
-    const { container } = req.params;
-    const result = await callDockerTool('remove_container', { container });
-    res.json(result);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// ===== ORCHESTRATOR ROUTES =====
-
-app.post('/api/orchestrate/setup-test-env', async (req, res) => {
-  try {
-    const result = await orchestrateSetupTestEnv();
-    res.json(result);
-  } catch (error) {
-    console.error('❌ Setup test env error:', error.message);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-app.post('/api/orchestrate/deploy-app', async (req, res) => {
-  try {
-    const { dockerfile_path, app_name, port, env } = req.body;
-    const result = await orchestrateDeployApp(dockerfile_path, app_name, port, env);
-    res.json(result);
-  } catch (error) {
-    console.error('❌ Deploy app error:', error.message);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-app.post('/api/orchestrate/cleanup-env', async (req, res) => {
-  try {
-    const result = await orchestrateCleanupEnvironment();
-    res.json(result);
-  } catch (error) {
-    console.error('❌ Cleanup env error:', error.message);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-app.post('/api/orchestrate/summary-chain', async (req, res) => {
-  try {
-    const result = await orchestrateSummaryChain();
-    res.json(result);
-  } catch (error) {
-    console.error('❌ Orchestration error:', error.message);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// ===== CHAT ROUTES =====
-
-app.post('/api/chat/docker-command', async (req, res) => {
-  try {
-    const { command, args } = req.body;
-    let result;
-    switch(command) {
-      case 'setup-env':
-        result = await orchestrateSetupTestEnv();
-        break;
-      case 'cleanup-env':
-        result = await orchestrateCleanupEnvironment();
-        break;
-      case 'list-containers':
-        result = await callDockerTool('list_containers', { all: true });
-        break;
-      case 'deploy-app':
-        result = await orchestrateDeployApp(args.dockerfile, args.name, args.port, args.env);
-        break;
-      default:
-        return res.status(400).json({ error: 'Unknown command' });
-    }
-    res.json(result);
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// ✅ UPDATED: Chat with document context
 app.post('/api/chat', async (req, res) => {
   try {
     const { message, messages, index_name, top_k, context, temperature = 0.7 } = req.body;
-
-    // Support both formats
     const chatMessages = messages || (message ? [{ role: 'user', content: message }] : []);
     
     if (!chatMessages || chatMessages.length === 0) {
       return res.status(400).json({ error: 'Messages or message is required' });
     }
 
-    // If we have document context, inject it
     let systemContext = '';
     if (context) {
       systemContext = `You are a helpful assistant. Answer based on the following context:\n\n${context}\n\n`;
     }
 
-    // Build final messages for Perplexity
     const finalMessages = [
       {
         role: 'system',
@@ -523,13 +337,14 @@ app.post('/api/chat', async (req, res) => {
 
     const data = await response.json();
     const usage = data.usage || {};
+
     tokenStats.totalPromptTokens += usage.prompt_tokens || 0;
     tokenStats.totalCompletionTokens += usage.completion_tokens || 0;
     tokenStats.totalTokens += usage.total_tokens || 0;
     tokenStats.requests += 1;
 
     const content = data.choices?.[0]?.message?.content || '';
-    
+
     res.json({
       success: true,
       message: content,
@@ -543,12 +358,8 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
+// ========== RAG ==========
 
-/**
- * POST /api/rag/ask
- * Body: { question, mode, indexName?, topK? }
- * mode: "with_rag" | "no_rag" | "compare"
- */
 app.post('/api/rag/ask', async (req, res) => {
   try {
     const {
@@ -598,203 +409,19 @@ app.post('/api/rag/ask', async (req, res) => {
   }
 });
 
-
-
-function formatCompareResult(result) {
-  const topChunks = (result.withRag.retrievedChunks || []).slice(0, 5)
-    .map(c => `- [score=${c.score.toFixed(2)}] ${c.file_path}: "${c.text.substring(0, 100)}..."`)
-    .join('\n');
-
-  return `📌 ВОПРОС:
-${result.question}
-
-🧠 ОТВЕТ БЕЗ RAG:
-${result.noRag.llmAnswer}
-
-📚 ОТВЕТ С RAG:
-${result.withRag.llmAnswer}
-
-🔍 ГДЕ RAG ПОМОГ:
-${(result.analysis.whereRagHelped || []).map(p => `- ${p}`).join('\n')}
-
-😐 ГДЕ RAG НЕ НУЖЕН:
-${(result.analysis.whereRagNotNeeded || []).map(p => `- ${p}`).join('\n')}
-
-📎 ИСПОЛЬЗОВАННЫЕ ЧАНКИ:
-${topChunks}
-
-💡 ОБЩИЙ ВЫВОД:
-${result.analysis.summary}`;
-}
-// Добавить в конец routes:
-app.post('/api/rag/ask', async (req, res) => {
-  const { question, mode = 'basic_rag', indexName = 'docs_index' } = req.body;
-  
-  try {
-    let result;
-    
-    switch (mode) {
-      case 'basic_rag':
-        result = await answerWithRag(question, { indexName }); // Существующий
-        result.mode = 'basic_rag';
-        break;
-      case 'reranked_rag':
-        result = await answerWithRerankedRag(question, { indexName });
-        break;
-      case 'compare_rerank':
-        const [basic, reranked] = await Promise.all([
-          answerWithRag(question, { indexName }),
-          answerWithRerankedRag(question, { indexName })
-        ]);
-        result = await analyzeRagComparison(basic, reranked, question);
-        break;
-      default:
-        return res.status(400).json({ error: 'Mode: basic_rag|reranked_rag|compare_rerank' });
-    }
-    
-    res.json(result);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// 🔍 PR Review API
-app.post('/api/pr/review', async (req, res) => {
-  try {
-    const { baseBranch, compareBranch } = req.body;
-
-    if (!baseBranch || !compareBranch) {
-      return res.status(400).json({
-        success: false,
-        error: 'Missing baseBranch or compareBranch'
-      });
-    }
-
-    console.log(`🔍 PR Review: ${baseBranch}...${compareBranch}`);
-    const result = await reviewPullRequest(baseBranch, compareBranch);
-
-    res.json(result);
-  } catch (error) {
-    console.error('❌ PR review error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// ===== TEST RUNNER ENDPOINTS =====
-
-app.post('/api/test/run', async (req, res) => {
-  try {
-    console.log('🧪 Running tests...');
-    
-    const tests = [
-      { name: 'Setup PostgreSQL + Redis environment', passed: true, duration: Math.random() * 2000 + 1000 },
-      { name: 'Get containers list', passed: true, duration: Math.random() * 500 + 200 },
-      { name: 'Cleanup environment', passed: true, duration: Math.random() * 800 + 300 },
-      { name: 'Chat with Docker command', passed: true, duration: Math.random() * 600 + 400 },
-      { name: 'Document search', passed: true, duration: Math.random() * 400 + 200 },
-      { name: 'Fetch GitHub issues', passed: Math.random() > 0.3, duration: Math.random() * 1000 + 500 }
-    ];
-
-    const passed = tests.filter(t => t.passed).length;
-    const failed = tests.filter(t => !t.passed).length;
-    const totalDuration = tests.reduce((sum, t) => sum + t.duration, 0);
-
-    const testResults = {
-      success: failed === 0,
-      passed,
-      failed,
-      total: tests.length,
-      duration: Math.round(totalDuration),
-      summary: `✅ ${passed}/${tests.length} tests passed`,
-      tests: tests.map(t => ({
-        name: t.name,
-        status: t.passed ? 'PASSED' : 'FAILED',
-        duration: Math.round(t.duration)
-      })),
-      timestamp: new Date().toISOString()
-    };
-
-    console.log('✅ Tests completed:', testResults.summary);
-    res.json(testResults);
-  } catch (err) {
-    console.error('❌ Test error:', err.message);
-    res.status(500).json({
-      success: false,
-      error: err.message,
-      passed: 0,
-      failed: 1,
-      duration: 0,
-      summary: '❌ Test runner error'
-    });
-  }
-});
-
-app.get('/api/test/logs', async (req, res) => {
-  res.json({
-    message: 'Test logs available after running tests',
-    timestamp: new Date().toISOString()
-  });
-});
-
-app.get('/api/stats', (req, res) => {
-  res.json(tokenStats);
-});
-
-// ===== HEALTH CHECK =====
-
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
-// ===== SERVER STARTUP =====
+// ========== SERVER STARTUP ==========
 
 const server = app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
-  console.log(`\n📚 Documents Pipeline:`);
-  console.log(` GET  http://localhost:${PORT}/api/documents/indexes`);
-  console.log(` POST http://localhost:${PORT}/api/documents/index`);
-  console.log(` POST http://localhost:${PORT}/api/documents/search`);
-  console.log(`\n📋 Tasks:`);
-  console.log(` GET  http://localhost:${PORT}/api/tasks`);
-  console.log(` POST http://localhost:${PORT}/api/tasks`);
-  console.log(`\n💬 Chat:`);
-  console.log(` POST http://localhost:${PORT}/api/chat`);
-  console.log(`\n🧪 Tests:`);
-  console.log(` POST http://localhost:${PORT}/api/test/run`);
+  console.log(`\n📚 GitHub PR Review:`);
+  console.log(`  GET  http://localhost:${PORT}/api/github/pulls`);
+  console.log(`  GET  http://localhost:${PORT}/api/github/pulls/:number`);
+  console.log(`  POST http://localhost:${PORT}/api/pr/review/:prNumber`);
 });
-// ✅ Обработка ошибки занятого порта
+
 server.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
     console.error(`❌ Port ${PORT} is already in use`);
-    console.log('💡 Trying to kill process on port', PORT);
-    
-    // Попытка убить процесс (Windows/Linux)
-    try {
-      if (process.platform === 'win32') {
-        execSync(`netstat -ano | findstr :${PORT}`, { encoding: 'utf-8' })
-          .split('\n')
-          .forEach(line => {
-            const match = line.match(/LISTENING\s+(\d+)/);
-            if (match) {
-              const pid = match[1];
-              console.log(`🔪 Killing PID ${pid}`);
-              execSync(`taskkill /PID ${pid} /F`, { stdio: 'ignore' });
-            }
-          });
-      } else {
-        // Linux/Mac
-        execSync(`lsof -ti:${PORT} | xargs kill -9`, { stdio: 'ignore' });
-      }
-      
-      console.log('✅ Port cleared, restart server manually');
-    } catch (killErr) {
-      console.error('⚠️ Could not kill process automatically');
-      console.log(`Run manually:\n  Windows: netstat -ano | findstr :${PORT} → taskkill /PID <PID> /F\n  Linux/Mac: lsof -ti:${PORT} | xargs kill -9`);
-    }
-    
     process.exit(1);
   } else {
     console.error('Server error:', err);
@@ -802,46 +429,18 @@ server.on('error', (err) => {
   }
 });
 
-// ✅ Graceful shutdown на SIGINT/SIGTERM
 const shutdown = async (signal) => {
   console.log(`\n⚠️ ${signal} received, shutting down gracefully...`);
-  
-  // Закрываем HTTP сервер
   server.close(() => {
     console.log('✅ HTTP server closed');
+    process.exit(0);
   });
-  
-  // Закрываем MCP клиенты (если есть cleanup методы)
-  try {
-    if (global.ragMcpClient) {
-      await global.ragMcpClient.close?.();
-      console.log('✅ RAG MCP client closed');
-    }
-    if (global.gitMcpClient) {
-      await global.gitMcpClient.close?.();
-      console.log('✅ Git MCP client closed');
-    }
-  } catch (err) {
-    console.error('MCP cleanup error:', err.message);
-  }
-  
-  // Даём 5 секунд на завершение активных запросов
+
   setTimeout(() => {
     console.log('⏱️ Forcing shutdown after timeout');
     process.exit(0);
   }, 5000);
 };
 
-process.on('SIGINT', () => shutdown('SIGINT'));   // Ctrl+C
-process.on('SIGTERM', () => shutdown('SIGTERM')); // Docker stop
-
-// ✅ Обработка необработанных ошибок
-process.on('uncaughtException', (err) => {
-  console.error('💥 Uncaught Exception:', err);
-  shutdown('uncaughtException');
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('💥 Unhandled Rejection at:', promise, 'reason:', reason);
-  shutdown('unhandledRejection');
-});
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
