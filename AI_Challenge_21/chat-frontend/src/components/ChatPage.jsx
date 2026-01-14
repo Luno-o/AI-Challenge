@@ -111,8 +111,7 @@ export default function ChatPage() {
     }
   };
 
-  // ===== Submit =====
-
+// ===== Submit =====
 const handleSubmit = async (e) => {
   e.preventDefault();
   if (!input.trim() || loading) return;
@@ -126,28 +125,43 @@ const handleSubmit = async (e) => {
     timestamp: new Date().toLocaleTimeString(),
     ragMode
   };
+
   setMessages(prev => [...prev, userMsg]);
+  setInput('');
 
   try {
-    if (!ragMode) {
-      await handleChat(question);  // хук сам управляет loading
-    } else {
-      // RAG — вручную управляем loading
-      //setLoading(true);  ← ЭТОТ КОД НЕ НУЖЕН (нет setLoading в ChatPage)
+    // 1. Проверка на GitHub PR (приоритетнее RAG)
+    if (question.toLowerCase().includes('pull request') || 
+        question.toLowerCase().includes('pr')) {
       
-      const res = ragMode === 'compare_rerank' 
-        ? await compareRagModes(question)
-        : await askWithRagMode(question, ragMode);
+      const response = await fetch('/api/github/pulls');
+      const data = await response.json();
 
-      const assistantMsg = {
-        role: 'assistant',
-        content: res.llmAnswer || JSON.stringify(res, null, 2),
-        timestamp: new Date().toLocaleTimeString(),
-        sources: extractSources(res),
-        rawData: res
-      };
-      setMessages(prev => [...prev, assistantMsg]);
+
     }
+
+    // 2. Обычный чат без RAG
+    if (!ragMode) {
+      await handleChat(question);
+      inputRef.current?.focus();
+      return;
+    }
+
+    // 3. RAG запрос
+    const res = ragMode === 'compare_rerank'
+      ? await compareRagModes(question)
+      : await askWithRagMode(question, ragMode);
+
+    const assistantMsg = {
+      role: 'assistant',
+      content: res.llmAnswer || JSON.stringify(res, null, 2),
+      timestamp: new Date().toLocaleTimeString(),
+      sources: extractSources(res),
+      rawData: res
+    };
+
+    setMessages(prev => [...prev, assistantMsg]);
+
   } catch (err) {
     console.error('Submit error:', err);
     const errMsg = {
@@ -158,10 +172,10 @@ const handleSubmit = async (e) => {
     };
     setMessages(prev => [...prev, errMsg]);
   } finally {
-    setInput('');
     inputRef.current?.focus();
   }
 };
+
 
 
   // ===== Quick prompts =====
@@ -169,7 +183,7 @@ const handleSubmit = async (e) => {
   const quickPrompts = [
     { text: '🧪 Tests', emoji: '🧪', action: 'test' },
     { text: '📋 Issues', emoji: '📋', prompt: 'Какие открытые issues?' },
-    { text: '🔀 PRs', emoji: '🔀', prompt: 'Покажи pull requests' },
+
     { text: '🐳 Docker', emoji: '🐳', prompt: 'подними postgres' },
     { text: '📚 Docs', emoji: '📚', action: 'docs' }
   ];
