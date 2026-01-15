@@ -14,7 +14,7 @@
 
 ## Структура директорий
 
-ai_challenge_19/
+AI_Challenge_21/
 ├── server/ # Backend (Node.js)
 │ ├── index.js # Главный Express сервер с API endpoints
 │ │
@@ -115,7 +115,7 @@ PERPLEXITY_MODEL=sonar
 PORT=4000
 
 # Git MCP
-REPO_PATH=D:\perplexity-chat
+REPO_PATH=/mnt/d/AI-Challenge
 
 # GitHub (optional)
 GITHUB_TOKEN=ghp_xxxxxxxxxxxx
@@ -221,7 +221,7 @@ search_in_repo(pattern, file_pattern) — git grep
 
 get_repo_structure(depth) — дерево файлов репозитория
 
-Working Directory: REPO_PATH из .env (например, D:\perplexity-chat)
+Working Directory: REPO_PATH из .env (например, D:\AI-Challenge)
 
 Transport: stdio (JSON-RPC)
 
@@ -324,13 +324,13 @@ Response: {noRag: {...}, withRag: {...}, analysis: {...}}
 Deployment
 Development
 bash
-# Terminal 1 - Backend
-cd server
+# Terminal 1 - Backend (используйте Windows CMD/PowerShell, не WSL!)
+cd D:\AI-Challenge\AI_Challenge_21\server
 npm install
 npm run dev  # http://localhost:4000
 
 # Terminal 2 - Frontend
-cd client
+cd D:\AI-Challenge\AI_Challenge_21\client
 npm install
 npm run dev  # http://localhost:5173
 Важные концепции
@@ -358,12 +358,18 @@ Stdio transport (JSON-RPC over stdin/stdout)
 Client → Server коммуникация
 
 Troubleshooting
+
+Проблема: Git MCP ошибка "spawnSync /bin/sh ENOENT" в WSL
+Решение:
+- Запускайте сервер через Windows CMD/PowerShell, а не WSL bash
+- Или измените REPO_PATH=/mnt/d/AI-Challenge и shell: '/bin/bash' в git-mcp-server.js
+
 Проблема: Git MCP ошибка "not a git repository"
 Решение:
 
-Проверь .env: REPO_PATH=D:\perplexity-chat (используй \ для Windows)
+Проверь .env: REPO_PATH=D:\AI-Challenge (используй \ для Windows)
 
-Убедись, что путь валидный git-репозиторий: cd D:\perplexity-chat && git status
+Убедись, что путь валидный git-репозиторий: cd D:\AI-Challenge && git status
 
 Проверь, что gitMcpClient.js загружает dotenv и передаёт REPO_PATH в spawn env
 
@@ -390,4 +396,4 @@ License
 MIT
 
 Версия
-AI Challenge 19 - RAG + Git Integration
+AI Challenge 21 - RAG + Git Integration
