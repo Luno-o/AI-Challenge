@@ -114,6 +114,42 @@
       "createdAt": "2025-12-21T19:38:48.804Z",
       "dueDate": null,
       "updatedAt": "2025-12-21T19:39:27.591Z"
+    },
+    {
+      "id": "1768513577883",
+      "title": "исправить баг в авторизации",
+      "description": "",
+      "priority": "high",
+      "status": "todo",
+      "createdAt": "2026-01-15T21:46:17.883Z",
+      "dueDate": null
+    },
+    {
+      "id": "1768513750689",
+      "title": "добавить тесты\"",
+      "description": "",
+      "priority": "medium",
+      "status": "todo",
+      "createdAt": "2026-01-15T21:49:10.689Z",
+      "dueDate": null
+    },
+    {
+      "id": "1768514354702",
+      "title": "исправить баг в авторизации",
+      "description": "",
+      "priority": "high",
+      "status": "todo",
+      "createdAt": "2026-01-15T21:59:14.702Z",
+      "dueDate": null
+    },
+    {
+      "id": "1768514417215",
+      "title": "добавить тесты",
+      "description": "",
+      "priority": "medium",
+      "status": "todo",
+      "createdAt": "2026-01-15T22:00:17.215Z",
+      "dueDate": null
     }
   ]
 }

@@ -9,6 +9,7 @@ import { processAssistantCommand } from './assistantService.js';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { processTeamQuery } from './teamAssistantService.js';
 import { listPullRequests, getPullRequest } from './githubService.js';
 import { callDockerTool, listDockerTools } from './mcpClient.js';
 import {
@@ -76,6 +77,25 @@ return res.status(400).json({ error: 'user_id и question обязательны
 
 const result = await processUserQuestion(user_id, question);
 res.json(result);
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// 🤖 TEAM ASSISTANT API
+// ═══════════════════════════════════════════════════════════════════
+app.post('/api/team/ask', async (req, res) => {
+  const { query, user_id } = req.body;
+
+  if (!query) {
+    return res.status(400).json({ error: 'query обязателен' });
+  }
+
+  try {
+    const result = await processTeamQuery(query, user_id || 'team_user');
+    res.json(result);
+  } catch (error) {
+    console.error('[API /team/ask] Error:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // ========== PR REVIEW ENDPOINTS ==========

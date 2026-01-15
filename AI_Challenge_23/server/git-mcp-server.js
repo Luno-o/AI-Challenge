@@ -1,16 +1,35 @@
-#!/usr/bin/env node
-
+// server/git-mcp-server.js
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { execSync } from 'child_process';
-import fs from 'fs';
-import path from 'path';
+import { readFileSync, existsSync } from 'fs';
+import { join } from 'path';
+
+const REPO_PATH = process.env.REPO_PATH || process.cwd();
+
+// ✅ Windows-совместимая функция выполнения Git команд
+function runGitCommand(command, options = {}) {
+  try {
+    const fullCommand = `git ${command}`;
+    const result = execSync(fullCommand, {
+      cwd: REPO_PATH,
+      encoding: 'utf-8',
+      maxBuffer: 10 * 1024 * 1024,
+      // ✅ Исправление для Windows: используем cmd.exe вместо bash
+      shell: process.platform === 'win32' ? 'cmd.exe' : '/bin/bash',
+      ...options,
+    });
+    return result.trim();
+  } catch (error) {
+    throw new Error(`Git command failed: ${error.message}`);
+  }
+}
 
 const server = new Server(
   {
     name: 'git-mcp-server',
-    version: '1.1.0',
+    version: '1.2.0', // ✅ Обновили версию
   },
   {
     capabilities: {
@@ -19,30 +38,12 @@ const server = new Server(
   }
 );
 
-// Путь к репозиторию (можно передавать через env или аргумент)
-const REPO_PATH = process.env.REPO_PATH || process.cwd();
-
-// Утилита: выполнить git команду
-function runGit(args) {
-  try {
-    const result = execSync(`git ${args}`, {
-      cwd: REPO_PATH,
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-      shell: '/bin/bash'
-    });
-    return { success: true, output: result.trim() };
-  } catch (error) {
-    return { success: false, error: error.message, stderr: error.stderr?.toString() };
-  }
-}
-
-// Tools
+// Tools definitions
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
     {
       name: 'get_current_branch',
-      description: 'Get current git branch name',
+      description: 'Get the current Git branch name',
       inputSchema: {
         type: 'object',
         properties: {},
@@ -50,7 +51,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'get_git_status',
-      description: 'Get git status (modified, staged, untracked files)',
+      description: 'Get Git status (modified, staged, untracked files)',
       inputSchema: {
         type: 'object',
         properties: {},
@@ -58,33 +59,46 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'get_recent_commits',
-      description: 'Get recent commit history',
+      description: 'Get recent Git commits',
       inputSchema: {
         type: 'object',
         properties: {
-          count: { type: 'number', description: 'Number of commits to fetch', default: 5 }
+          count: {
+            type: 'number',
+            description: 'Number of commits to retrieve (default: 10)',
+            default: 10,
+          },
         },
       },
     },
     {
       name: 'get_file_content',
-      description: 'Read file content from repository',
+      description: 'Get content of a file from the repository',
       inputSchema: {
         type: 'object',
         properties: {
-          file_path: { type: 'string', description: 'Relative path to file' }
+          file_path: {
+            type: 'string',
+            description: 'Relative path to file from repository root',
+          },
         },
         required: ['file_path'],
       },
     },
     {
       name: 'search_in_repo',
-      description: 'Search for text pattern in repository (git grep)',
+      description: 'Search for text pattern in repository using git grep',
       inputSchema: {
         type: 'object',
         properties: {
-          pattern: { type: 'string', description: 'Search pattern (regex)' },
-          file_pattern: { type: 'string', description: 'File pattern (e.g., "*.js")', default: '*' }
+          pattern: {
+            type: 'string',
+            description: 'Search pattern (regex supported)',
+          },
+          file_pattern: {
+            type: 'string',
+            description: 'File pattern to limit search (e.g., "*.js")',
+          },
         },
         required: ['pattern'],
       },
@@ -95,238 +109,210 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       inputSchema: {
         type: 'object',
         properties: {
-          depth: { type: 'number', description: 'Max depth', default: 3 }
+          depth: {
+            type: 'number',
+            description: 'Maximum depth of tree (default: 3)',
+            default: 3,
+          },
         },
-      },
-    },
-    // ✅ NEW: PR Tools
-    {
-      name: 'get_pr_diff',
-      description: 'Get diff between two branches (for PR review)',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          base_branch: { type: 'string', description: 'Base branch (e.g., main)' },
-          compare_branch: { type: 'string', description: 'Compare branch (feature branch)' }
-        },
-        required: ['base_branch', 'compare_branch'],
-      },
-    },
-    {
-      name: 'get_pr_files',
-      description: 'List changed files in PR with status (A/M/D)',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          base_branch: { type: 'string' },
-          compare_branch: { type: 'string' }
-        },
-        required: ['base_branch', 'compare_branch'],
-      },
-    },
-    {
-      name: 'get_file_diff',
-      description: 'Get diff for specific file between branches',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          file_path: { type: 'string', description: 'Relative path to file' },
-          base_branch: { type: 'string' },
-          compare_branch: { type: 'string' }
-        },
-        required: ['file_path', 'base_branch', 'compare_branch'],
-      },
-    },
-    {
-      name: 'get_pr_stats',
-      description: 'Get PR statistics (insertions, deletions, files changed)',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          base_branch: { type: 'string' },
-          compare_branch: { type: 'string' }
-        },
-        required: ['base_branch', 'compare_branch'],
       },
     },
   ],
 }));
 
+// Tool handlers
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
-  switch (name) {
-    case 'get_current_branch': {
-      const result = runGit('branch --show-current');
-      return {
-        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-      };
-    }
+  try {
+    switch (name) {
+      case 'get_current_branch': {
+        const branch = runGitCommand('branch --show-current');
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({ branch }),
+            },
+          ],
+        };
+      }
 
-    case 'get_git_status': {
-      const result = runGit('status --short');
-      return {
-        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-      };
-    }
+      case 'get_git_status': {
+        const statusOutput = runGitCommand('status --porcelain');
+        const lines = statusOutput.split('\n').filter(Boolean);
 
-    case 'get_recent_commits': {
-      const count = args.count || 5;
-      const result = runGit(`log --oneline -n ${count}`);
-      return {
-        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-      };
-    }
+        const status = {
+          modified: [],
+          staged: [],
+          untracked: [],
+          branch: runGitCommand('branch --show-current'),
+        };
 
-    case 'get_file_content': {
-      try {
-        const filePath = path.join(REPO_PATH, args.file_path);
-        if (!fs.existsSync(filePath)) {
-          return {
-            content: [{ type: 'text', text: JSON.stringify({ success: false, error: 'File not found' }) }],
-          };
+        lines.forEach((line) => {
+          const statusCode = line.substring(0, 2);
+          const filePath = line.substring(3);
+
+          if (statusCode[0] === 'M' || statusCode[1] === 'M') {
+            status.modified.push(filePath);
+          }
+          if (statusCode[0] !== ' ' && statusCode[0] !== '?') {
+            status.staged.push(filePath);
+          }
+          if (statusCode === '??') {
+            status.untracked.push(filePath);
+          }
+        });
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(status, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'get_recent_commits': {
+        const count = args?.count || 10;
+        const format = '--pretty=format:{"hash":"%H","author":"%an","date":"%ad","message":"%s"},';
+        const commits = runGitCommand(`log -${count} ${format} --date=iso`);
+        
+        // Parse JSON (remove trailing comma and wrap in array)
+        const commitsArray = JSON.parse(`[${commits.slice(0, -1)}]`);
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(commitsArray, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'get_file_content': {
+        const filePath = args?.file_path;
+        if (!filePath) throw new Error('file_path is required');
+
+        const fullPath = join(REPO_PATH, filePath);
+        if (!existsSync(fullPath)) {
+          throw new Error(`File not found: ${filePath}`);
         }
 
-        const content = fs.readFileSync(filePath, 'utf-8');
+        const content = readFileSync(fullPath, 'utf-8');
         return {
-          content: [{ type: 'text', text: JSON.stringify({ success: true, file_path: args.file_path, content }) }],
-        };
-      } catch (error) {
-        return {
-          content: [{ type: 'text', text: JSON.stringify({ success: false, error: error.message }) }],
-        };
-      }
-    }
-
-    case 'search_in_repo': {
-      const pattern = args.pattern;
-      const filePattern = args.file_pattern || '*';
-      const result = runGit(`grep -n "${pattern}" -- "${filePattern}"`);
-      return {
-        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-      };
-    }
-
-    case 'get_repo_structure': {
-      const depth = args.depth || 3;
-      const result = runGit(`ls-tree -r --name-only HEAD`);
-      if (result.success) {
-        const files = result.output.split('\n').filter(f => f.trim());
-        const tree = buildTree(files, depth);
-        return {
-          content: [{ type: 'text', text: JSON.stringify({ success: true, tree }, null, 2) }],
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                file_path: filePath,
+                content,
+                lines: content.split('\n').length,
+              }),
+            },
+          ],
         };
       }
 
-      return {
-        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-      };
-    }
+      case 'search_in_repo': {
+        const pattern = args?.pattern;
+        if (!pattern) throw new Error('pattern is required');
 
-    // ✅ NEW: PR Tools Implementation
-    case 'get_pr_diff': {
-      const { base_branch, compare_branch } = args;
-      const result = runGit(`diff ${base_branch}...${compare_branch}`);
-      return {
-        content: [{
-          type: 'text',
-          text: JSON.stringify({
-            success: result.success,
-            base_branch,
-            compare_branch,
-            diff: result.output || result.error
-          }, null, 2)
-        }],
-      };
-    }
+        const filePattern = args?.file_pattern || '';
+        const grepCmd = `grep -n "${pattern}" ${filePattern}`;
+        
+        let results;
+        try {
+          results = runGitCommand(grepCmd);
+        } catch {
+          results = ''; // No matches found
+        }
 
-    case 'get_pr_files': {
-      const { base_branch, compare_branch } = args;
-      const result = runGit(`diff --name-status ${base_branch}...${compare_branch}`);
-      
-      if (result.success) {
-        const files = result.output.split('\n')
-          .filter(line => line.trim())
-          .map(line => {
-            const parts = line.split('\t');
+        const matches = results
+          .split('\n')
+          .filter(Boolean)
+          .map((line) => {
+            const [file, lineNum, ...textParts] = line.split(':');
             return {
-              status: parts[0], // A (Added), M (Modified), D (Deleted)
-              path: parts.slice(1).join('\t')
+              file,
+              line: parseInt(lineNum, 10),
+              text: textParts.join(':'),
             };
           });
 
         return {
-          content: [{
-            type: 'text',
-            text: JSON.stringify({ success: true, files }, null, 2)
-          }],
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                pattern,
+                matches_count: matches.length,
+                matches: matches.slice(0, 50), // Limit results
+              }),
+            },
+          ],
         };
       }
 
-      return {
-        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-      };
-    }
+      case 'get_repo_structure': {
+        const depth = args?.depth || 3;
+        
+        // ✅ Windows-совместимая команда tree
+        let tree;
+        if (process.platform === 'win32') {
+          // Windows: использовать dir или git ls-tree
+          tree = runGitCommand('ls-tree -r --name-only HEAD');
+        } else {
+          // Linux/Mac: использовать tree или ls-tree
+          try {
+            tree = execSync(`tree -L ${depth}`, {
+              cwd: REPO_PATH,
+              encoding: 'utf-8',
+            });
+          } catch {
+            tree = runGitCommand('ls-tree -r --name-only HEAD');
+          }
+        }
 
-    case 'get_file_diff': {
-      const { file_path, base_branch, compare_branch } = args;
-      const result = runGit(`diff ${base_branch}...${compare_branch} -- "${file_path}"`);
-      
-      return {
-        content: [{
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({ structure: tree }),
+            },
+          ],
+        };
+      }
+
+      default:
+        throw new Error(`Unknown tool: ${name}`);
+    }
+  } catch (error) {
+    return {
+      content: [
+        {
           type: 'text',
           text: JSON.stringify({
-            success: result.success,
-            file_path,
-            diff: result.output || result.error
-          }, null, 2)
-        }],
-      };
-    }
-
-    case 'get_pr_stats': {
-      const { base_branch, compare_branch } = args;
-      const result = runGit(`diff --shortstat ${base_branch}...${compare_branch}`);
-      
-      return {
-        content: [{
-          type: 'text',
-          text: JSON.stringify({
-            success: result.success,
-            stats: result.output || result.error
-          }, null, 2)
-        }],
-      };
-    }
-
-    default:
-      throw new Error(`Unknown tool: ${name}`);
+            error: error.message,
+            tool: name,
+          }),
+        },
+      ],
+      isError: true,
+    };
   }
 });
 
-// Построение дерева файлов (упрощённо)
-function buildTree(files, maxDepth) {
-  const tree = {};
-  files.forEach(file => {
-    const parts = file.split('/');
-    if (parts.length > maxDepth) return;
-    let current = tree;
-    parts.forEach((part, i) => {
-      if (i === parts.length - 1) {
-        current[part] = 'file';
-      } else {
-        current[part] = current[part] || {};
-        current = current[part];
-      }
-    });
-  });
-  return tree;
-}
-
+// Start server
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error('Git MCP Server v1.1.0 running on stdio');
+  console.error('Git MCP Server v1.2.0 running on stdio (Windows-compatible)');
 }
 
-main().catch(console.error);
+main().catch((error) => {
+  console.error('Git MCP Server error:', error);
+  process.exit(1);
+});
