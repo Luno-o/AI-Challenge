@@ -174,23 +174,51 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
-      case 'get_recent_commits': {
-        const count = args?.count || 10;
-        const format = '--pretty=format:{"hash":"%H","author":"%an","date":"%ad","message":"%s"},';
-        const commits = runGitCommand(`log -${count} ${format} --date=iso`);
-        
-        // Parse JSON (remove trailing comma and wrap in array)
-        const commitsArray = JSON.parse(`[${commits.slice(0, -1)}]`);
+case 'get_recent_commits': {
+  const count = args?.count || 10;
+  
+  // ✅ ИСПРАВЛЕНИЕ: Используем %x00 как разделитель вместо запятой
+  const format = '--pretty=format:%H%x00%an%x00%ad%x00%s';
+  
+  let commits;
+  try {
+    commits = runGitCommand(`log -${count} ${format} --date=iso`);
+  } catch (error) {
+    // Если нет коммитов (пустой репозиторий)
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify([]),
+        },
+      ],
+    };
+  }
+  
+  // Парсинг строк в массив объектов
+  const commitsArray = commits
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => {
+      const [hash, author, date, message] = line.split('\x00');
+      return {
+        hash: hash || '',
+        author: author || '',
+        date: date || '',
+        message: message || '',
+      };
+    });
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(commitsArray, null, 2),
-            },
-          ],
-        };
-      }
+  return {
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify(commitsArray),
+      },
+    ],
+  };
+}
+
 
       case 'get_file_content': {
         const filePath = args?.file_path;
