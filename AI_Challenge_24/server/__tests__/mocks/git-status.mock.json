@@ -1,0 +1,14 @@
+{
+  "branch": "main",
+  "modified": [
+    "server/teamAssistantService.js",
+    "server/index.js",
+    "client/src/pages/TeamAssistantPage.jsx"
+  ],
+  "staged": [
+    "server/git-mcp-server.js"
+  ],
+  "untracked": [
+    "deployment-pipeline-manager.js"
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "tasks": [
+    {
+      "id": "1",
+      "title": "Fix authentication bug",
+      "description": "Users can't login with Google OAuth",
+      "priority": "high",
+      "status": "todo",
+      "createdAt": "2026-01-15T10:00:00.000Z",
+      "dependencies": []
+    },
+    {
+      "id": "2",
+      "title": "Add unit tests for RAG service",
+      "description": "Test document indexing and search",
+      "priority": "high",
+      "status": "in_progress",
+      "createdAt": "2026-01-16T12:00:00.000Z",
+      "dependencies": []
+    },
+    {
+      "id": "3",
+      "title": "Update documentation",
+      "description": "Add deployment guide",
+      "priority": "medium",
+      "status": "todo",
+      "createdAt": "2026-01-17T14:00:00.000Z",
+      "dependencies": ["1"]
+    },
+    {
+      "id": "4",
+      "title": "Refactor Docker setup",
+      "description": "Multi-stage build optimization",
+      "priority": "low",
+      "status": "todo",
+      "createdAt": "2026-01-18T09:00:00.000Z",
+      "dependencies": []
+    },
+    {
+      "id": "5",
+      "title": "Setup CI/CD pipeline",
+      "description": "GitHub Actions workflow",
+      "priority": "high",
+      "status": "done",
+      "createdAt": "2026-01-10T08:00:00.000Z",
+      "dependencies": []
+    }
+  ]
+}
