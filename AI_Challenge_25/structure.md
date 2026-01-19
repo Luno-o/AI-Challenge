@@ -1,7 +1,10 @@
-# MCP Server & Chat Integration Project with RAG + Git + Support + Team Assistant
+Вот обновленная структура проекта с интеграцией локальной LLM:
+
+text
+# MCP Server & Chat Integration Project with RAG + Git + Support + Team Assistant + Local LLM
 
 ## Общее описание
-Полнофункциональное приложение для интеграции MCP (Model Context Protocol) серверов с React-чат интерфейсом, **RAG (Retrieval-Augmented Generation)** системой, **Support Assistant** и **Team Assistant**. Архитектура включает микросервисы для управления задачами, документами, GitHub API, Docker, Git операций, Document Indexing Pipeline, поддержки пользователей и интеллектуального управления командой.
+Полнофункциональное приложение для интеграции MCP (Model Context Protocol) серверов с React-чат интерфейсом, **RAG (Retrieval-Augmented Generation)** системой, **Support Assistant**, **Team Assistant** и **локальной LLM (Ollama)**. Архитектура включает микросервисы для управления задачами, документами, GitHub API, Docker, Git операций, Document Indexing Pipeline, поддержки пользователей, интеллектуального управления командой и локальной обработки запросов.
 
 ## Deployment Architecture
 
@@ -16,6 +19,11 @@
   - Nixpacks builder
   - Root Directory: `/server`
   - Environment: PORT=4000 (Railway автоматически)
+
+- **Local LLM (Ollama)**: `http://localhost:11434`
+  - Запускается локально на машине разработчика
+  - Модели: gemma3:4b, llama3.2:3b, nomic-embed-text
+  - Интеграция через REST API
 
 ### GitHub Actions CI/CD Pipeline
 
@@ -88,7 +96,11 @@ RAILWAY_URL	Backend Production URL	После первого деплоя
 
 Фреймворки: Express.js, React, Vite
 
-AI/LLM: Perplexity API (sonar model)
+AI/LLM:
+
+Perplexity API (sonar model) - облачная
+
+Ollama (gemma3:4b, llama3.2:3b) - локальная
 
 MCP SDK: @modelcontextprotocol/sdk
 
@@ -115,12 +127,13 @@ AI_Challenge_23/
 │   ├── ragMcpClient.js
 │   ├── gitMcpClient.js
 │   ├── supportMcpClient.js
+│   ├── localLlmClient.js             # 🆕 Клиент для Ollama
 │   │
 │   ├── Service Layer
 │   ├── ragService.js
 │   ├── assistantService.js
 │   ├── supportAssistantService.js
-│   ├── teamAssistantService.js
+│   ├── teamAssistantService.js       # 🔄 Обновлён (+ Local LLM)
 │   ├── documentIndexer.js
 │   │
 │   ├── MCP Servers
@@ -137,13 +150,15 @@ AI_Challenge_23/
 │   │
 │   ├── Data Storage
 │   ├── documents/                     # Markdown документы
-│   ├── indexes/                       # JSON индексы (320 embeddings)
+│   ├── indexes/                       # JSON индексы (343 embeddings)
 │   ├── tasks.json                     # База задач
 │   │
 │   ├── Configuration
-│   ├── .env                           # 🆕 Railway Environment Variables
+│   ├── .env                           # 🔄 Railway + Ollama Environment Variables
 │   │   # PERPLEXITY_API_KEY (from Railway secrets)
 │   │   # PERPLEXITY_MODEL=sonar
+│   │   # OLLAMA_URL=http://localhost:11434  # 🆕
+│   │   # OLLAMA_MODEL=gemma3:4b             # 🆕
 │   │   # REPO_PATH=/app/repo (Railway volume)
 │   │   # PORT=4000 (Railway auto-injected)
 │   │
@@ -160,10 +175,12 @@ AI_Challenge_23/
 │   │   │   ├── ChatPage.jsx
 │   │   │   ├── AssistantPage.jsx
 │   │   │   ├── SupportPage.jsx
-│   │   │   └── TeamAssistantPage.jsx
+│   │   │   └── TeamAssistantPage.jsx  # 🔄 Обновлён (+ LLM Switcher)
 │   │   ├── components/
 │   │   ├── hooks/
+│   │   │   └── useTeamAssistant.js    # Без изменений
 │   │   └── styles/
+│   │       └── TeamAssistantPage.css  # 🔄 Обновлён (+ LLM Switcher styles)
 │   │
 │   ├── .env                           # 🆕 Vercel Environment Variables
 │   │   # VITE_API_URL=https://your-backend.railway.app
@@ -174,10 +191,10 @@ AI_Challenge_23/
 │   └── package.json
 │
 └── Configuration
-    ├── .env.example                   # 🆕 Шаблон для локальной разработки
+    ├── .env.example                   # 🔄 Шаблон для локальной разработки + Ollama
     ├── .gitignore                     # 🆕 Исключить .env, node_modules
     ├── package.json
-    └── structure.md                   # Этот файл (v1.2.0)
+    └── structure.md                   # Этот файл (v1.3.0)
 Deployment Configuration
 Railway (Backend)
 Файл: server/railway.json
@@ -219,15 +236,38 @@ Environment Variables (Vercel Dashboard):
 bash
 VITE_API_URL=https://your-backend.railway.app
 NODE_VERSION=20
+Ollama (Local LLM)
+Установка (Windows):
+
+bash
+# 1. Скачать с ollama.com
+# 2. Установить и запустить автоматически на localhost:11434
+
+# 3. Скачать модели
+ollama pull gemma3:4b
+ollama pull llama3.2:3b
+ollama pull nomic-embed-text
+
+# 4. Проверить
+ollama list
+curl http://localhost:11434
+Environment Variables (Local Development):
+
+bash
+OLLAMA_URL=http://localhost:11434
+OLLAMA_MODEL=gemma3:4b
 Development vs Production
 Local Development
 bash
-# Terminal 1 - Backend
+# Terminal 1 - Ollama (если не запущена автоматически)
+ollama serve
+
+# Terminal 2 - Backend
 cd server
 npm install
 npm run dev  # http://localhost:4000
 
-# Terminal 2 - Frontend  
+# Terminal 3 - Frontend  
 cd client
 npm install
 npm run dev  # http://localhost:5173
@@ -247,7 +287,12 @@ Base URL: https://your-backend.railway.app
 
 ✅ Team Assistant API
 Endpoint	Method	Body	Description
-/api/team/ask	POST	{query, user_id}	Natural Language запросы
+/api/team/ask	POST	{query, user_id}	Natural Language запросы (Perplexity + Ollama)
+🤖 Local LLM API (NEW)
+Endpoint	Method	Body	Description
+/api/local-llm/ask	POST	{prompt, temperature, top_p}	Прямой запрос к Ollama
+/api/local-llm/health	GET	-	Проверка доступности Ollama
+/api/local-llm/models	GET	-	Список установленных моделей
 📚 Documents Pipeline
 Endpoint	Method	Body	Description
 /api/documents/index	POST	{directory, index_name}	Создать индекс
@@ -274,6 +319,10 @@ PORT=4000
 # Git MCP (Local)
 REPO_PATH=D:\perplexity-chat  # Windows: абсолютный путь
 
+# Ollama (Local LLM) 🆕
+OLLAMA_URL=http://localhost:11434
+OLLAMA_MODEL=gemma3:4b
+
 # GitHub (optional)
 GITHUB_TOKEN=ghp_xxxxxxxxxxxx
 Production - Railway (Backend)
@@ -283,10 +332,65 @@ PERPLEXITY_MODEL=sonar
 REPO_PATH=/app/repo
 PORT=4000
 NODE_ENV=production
+# Ollama недоступна в production (только локально)
 Production - Vercel (Frontend)
 bash
 VITE_API_URL=https://your-backend.railway.app
 NODE_VERSION=20
+Team Assistant Features
+🌐 Perplexity Mode (Default)
+✅ Управление задачами (создание, просмотр, удаление)
+
+✅ Приоритизация задач с учётом Git изменений
+
+✅ Статус проекта и аналитика
+
+✅ Git операции (status, commits, history)
+
+✅ RAG поиск в документации
+
+✅ Умный анализ и рекомендации
+
+Примеры команд:
+
+text
+"Покажи все задачи"
+"Что делать первым?"
+"Статус проекта"
+"Создай задачу: исправить баг, приоритет high"
+"Как работает RAG в этом проекте?"
+"Покажи последние 5 коммитов"
+🤖 Ollama Mode (Local LLM)
+✅ Быстрые ответы без интернета
+
+✅ Приватность (все данные локально)
+
+✅ Поддержка русского языка
+
+✅ Общие знания и объяснения
+
+✅ Модели: gemma3:4b (3.3 GB), llama3.2:3b (2.0 GB)
+
+Активация:
+
+Переключить на "🤖 Ollama" в интерфейсе
+
+Задать вопрос напрямую
+
+Примеры запросов:
+
+text
+"Что такое MCP протокол?"
+"Объясни как работает RAG"
+"Как настроить Docker контейнер?"
+"В чём разница между REST и GraphQL?"
+LLM Switcher (Frontend)
+jsx
+// Переключатель между Perplexity и Ollama
+[🌐 Perplexity] [🤖 Ollama]
+
+// Perplexity - умный анализ задач/Git/проекта
+// Ollama - быстрые ответы, общие знания
 Monitoring & Debugging
 Railway Logs
 bash
@@ -294,22 +398,47 @@ railway logs --service backend --tail
 Vercel Logs
 bash
 vercel logs https://your-app.vercel.app
+Ollama Logs
+bash
+# Проверка статуса
+curl http://localhost:11434
+
+# Список моделей
+ollama list
+
+# Запуск модели
+ollama run gemma3:4b
+
+# Тест через API
+curl -X POST http://localhost:11434/api/generate \
+  -H "Content-Type: application/json" \
+  -d '{"model": "gemma3:4b", "prompt": "Hello", "stream": false}'
 Health Check
 bash
 # Backend
 curl https://your-backend.railway.app/api/health
 
-# Response: {"status": "ok", "timestamp": "2026-01-19T..."}
+# Response: {"status": "ok", "timestamp": "2026-01-20T..."}
+
+# Local LLM
+curl http://localhost:4000/api/local-llm/health
+
+# Response: {"status": "ok", "url": "http://localhost:11434", "model": "gemma3:4b"}
 Testing
 Local Testing
 bash
 # Backend health
 curl http://localhost:4000/api/health
 
-# Team Assistant test
+# Team Assistant test (Perplexity)
 curl -X POST http://localhost:4000/api/team/ask \
   -H "Content-Type: application/json" \
   -d '{"query": "Статус проекта"}'
+
+# Local LLM test (Ollama)
+curl -X POST http://localhost:4000/api/local-llm/ask \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "Что такое MCP?"}'
 Production Testing
 bash
 # Frontend (Vercel)
@@ -364,6 +493,40 @@ json
     { "src": "/[^.]+", "dest": "/", "status": 200 }
   ]
 }
+Ollama Issues
+Error: Connection refused (localhost:11434)
+
+Solution:
+
+bash
+# Windows
+ollama serve
+
+# Проверка
+curl http://localhost:11434
+Error: Model not found
+
+Solution:
+
+bash
+# Список моделей
+ollama list
+
+# Скачать модель
+ollama pull gemma3:4b
+
+# Проверить в коде
+# server/.env: OLLAMA_MODEL=gemma3:4b
+Error: 404 on /api/generate
+
+Solution:
+
+Проверьте версию Ollama: ollama --version
+
+Обновите до последней: скачайте с ollama.com
+
+Перезапустите: ollama serve
+
 CORS Errors
 Error: Access-Control-Allow-Origin
 
@@ -376,9 +539,28 @@ app.use(cors({
     : 'http://localhost:5173'
 }));
 Версионирование
-Версия: v1.2.0
-Дата обновления: 2026-01-19 23:30 MSK
-Статус: ✅ Production Deployed
+Версия: v1.3.0
+Дата обновления: 2026-01-20 00:14 MSK
+Статус: ✅ Production Deployed + Local LLM Integrated
+
+Изменения v1.3.0:
+🤖 Добавлена интеграция с локальной LLM (Ollama)
+
+✅ server/localLlmClient.js - клиент для Ollama API
+
+✅ server/teamAssistantService.js - обновлён с поддержкой локальной LLM
+
+✅ client/src/pages/TeamAssistantPage.jsx - добавлен LLM switcher
+
+✅ client/src/styles/TeamAssistantPage.css - стили для switcher
+
+✅ Новые API эндпоинты: /api/local-llm/*
+
+✅ Документация по установке и использованию Ollama
+
+✅ Приоритизация запросов (локальная LLM > RAG)
+
+📚 Обновлён индекс документации (343 embeddings)
 
 Изменения v1.2.0:
 🚀 Добавлен CI/CD через GitHub Actions
@@ -401,56 +583,37 @@ app.use(cors({
 ✅ Все тесты пройдены (10/10)
 
 Roadmap
-v1.3.0 (Next Release)
- Vercel Analytics integration
+v1.4.0 (Next Release)
+☁️ Ollama в Docker для production deployment
 
- Railway volume для persistent storage
+📊 Vercel Analytics integration
 
- Automated testing в CI/CD pipeline
+💾 Railway volume для persistent storage
 
- Rollback mechanism для failed deployments
+🧪 Automated testing в CI/CD pipeline
 
- Environment-specific configs (staging/production)
+🔄 Rollback mechanism для failed deployments
 
-v1.4.0 (Future)
- Kubernetes deployment (alternative to Railway)
+⚙️ Environment-specific configs (staging/production)
 
- Multi-region deployment
+v1.5.0 (Future)
+🎯 Streaming ответов от локальной LLM
 
- Redis caching layer
+🔄 Автоматический выбор LLM (routing)
 
- Grafana/Prometheus monitoring
+📈 Метрики производительности LLM
+
+🌍 Kubernetes deployment (alternative to Railway)
+
+🚀 Multi-region deployment
+
+🗄️ Redis caching layer
+
+📊 Grafana/Prometheus monitoring
 
 Лицензия
 MIT
 
-Разработка: AI Challenge 23 - MCP Integration + RAG + CI/CD
-Статус: ✅ Production Ready (v1.2.0)
-Последнее обновление: 2026-01-19 23:30 MSK
-
-text
-
-Основные добавления в обновлённую структуру:[1]
-
-## 🚀 Deployment Architecture
-- Production endpoints (Vercel + Railway)
-- GitHub Actions CI/CD pipeline
-- Полная конфигурация GitHub Secrets
-
-## 📁 Структура файлов
-- `.github/workflows/deploy.yml` — CI/CD workflow
-- `railway.json` — конфигурация Railway
-- `vercel.json` — конфигурация Vercel
-- `.env.example` — шаблон для переменных окружения
-
-## ⚙️ Deployment Configuration
-- Railway настройки (Root Directory, Environment Variables)
-- Vercel настройки (Build Command, Routes для SPA)
-- Environment Variables для production
-
-## 🐛 Troubleshooting
-- Решения типичных проблем деплоя
-- CORS конфигурация для production
-- Debugging через Railway/Vercel logs
-
-Версия обновлена до **v1.2.0** с полной документацией по деплою и CI/CD процессу.
+Разработка: AI Challenge 23 - MCP Integration + RAG + CI/CD + Local LLM
+Статус: ✅ Production Ready (v1.3.0)
+Последнее обновление: 2026-01-20 00:14 MSK

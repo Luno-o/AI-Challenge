@@ -1,0 +1,19 @@
+{
+  "name": "team-assistant-monorepo",
+  "version": "1.1.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "cd server && npm run dev",
+    "dev:client": "cd client && npm run dev",
+    "deploy:check": "node deployment-pipeline-manager.js",
+    "deploy:vercel": "cd client && vercel --prod",
+    "deploy:railway": "cd server && railway up",
+    "docker:build": "cd server && docker build -t team-assistant .",
+    "docker:run": "docker run -p 4000:4000 --env-file server/.env team-assistant"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
