@@ -92,3 +92,4 @@ build/
 *.zip
 *.tar.gz
 *.rar
+server/.env.production
