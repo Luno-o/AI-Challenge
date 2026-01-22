@@ -92,4 +92,4 @@ build/
 *.zip
 *.tar.gz
 *.rar
-server/.env.production
+Ai_challenge_25/server/.env.production
