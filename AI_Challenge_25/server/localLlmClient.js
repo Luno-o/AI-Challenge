@@ -1,87 +1,186 @@
-// server/localLlmClient.js
 import axios from 'axios';
+import { OLLAMA_MODELS, TASK_PRESETS } from './ollamaConfig.js';
+import { SYSTEM_PROMPTS } from './promptTemplates.js';
 
 class LocalLlmClient {
   constructor() {
     this.baseUrl = process.env.OLLAMA_URL || 'http://localhost:11434';
-    // ✅ Используем модель, которая реально установлена
-    this.model = process.env.OLLAMA_MODEL || 'gemma3:4b';
+    this.model = process.env.OLLAMA_MODEL || 'gemma2:2b';
+    this.defaultConfig = OLLAMA_MODELS[this.model]?.recommended || {};
   }
 
-  /**
-   * Отправка запроса к локальной LLM
-   * @param {string} prompt - Текст запроса
-   * @param {Object} options - Дополнительные параметры
-   * @returns {Promise<string>} - Ответ модели
-   */
+  // Основной метод чата с расширенными опциями
   async chat(prompt, options = {}) {
+    const {
+      temperature,
+      top_p,
+      top_k,
+      num_predict,
+      repeat_penalty,
+      stop,
+      system,
+      preset,
+      timeout = 120000
+    } = options;
+
+    // Применяем preset если указан
+    const presetConfig = preset ? TASK_PRESETS[preset] : {};
+    
+    // Объединяем конфигурации (приоритет: options > preset > default)
+    const config = {
+      temperature: temperature ?? presetConfig.temperature ?? this.defaultConfig.temperature ?? 0.7,
+      top_p: top_p ?? presetConfig.top_p ?? this.defaultConfig.top_p ?? 0.9,
+      top_k: top_k ?? presetConfig.top_k ?? this.defaultConfig.top_k ?? 40,
+      num_predict: num_predict ?? presetConfig.num_predict ?? this.defaultConfig.num_predict ?? 256,
+      repeat_penalty: repeat_penalty ?? presetConfig.repeat_penalty ?? this.defaultConfig.repeat_penalty ?? 1.1,
+      ...(stop && { stop })
+    };
+
+    const systemPrompt = system ?? presetConfig.system ?? SYSTEM_PROMPTS.assistant;
+
+    console.log(`[Local LLM] Model: ${this.model}, Preset: ${preset || 'none'}, Config:`, config);
+
     try {
-      console.log(`[Local LLM] Sending to ${this.baseUrl}/api/generate with model ${this.model}`);
-      
       const response = await axios.post(
         `${this.baseUrl}/api/generate`,
         {
           model: this.model,
-          prompt: prompt,
+          prompt: `${systemPrompt}\n\nUser: ${prompt}\n\nAssistant:`,
           stream: false,
-          options: {
-            temperature: options.temperature || 0.7,
-            top_p: options.top_p || 0.9,
- num_predict: 200  // ✅ Ограничение токенов для скорости
-          }
+          options: config
         },
         {
-          timeout: 300000, // 30 секунд таймаут
-          headers: {
-            'Content-Type': 'application/json'
-          }
+          timeout,
+          headers: { 'Content-Type': 'application/json' }
         }
       );
 
-      console.log('[Local LLM] Response:', response.data);
       return response.data.response;
     } catch (error) {
-      console.error('[Local LLM] Error details:', {
-        message: error.message,
-        status: error.response?.status,
-        data: error.response?.data,
-        url: `${this.baseUrl}/api/generate`
-      });
+      console.error('[Local LLM] Error:', error.message);
       throw new Error(`Failed to query local LLM: ${error.message}`);
     }
   }
 
-  /**
-   * Проверка доступности LLM
-   */
+  // Streaming ответ
+  async *chatStream(prompt, options = {}) {
+    const config = this._buildConfig(options);
+    const systemPrompt = options.system ?? SYSTEM_PROMPTS.assistant;
+
+    try {
+      const response = await axios.post(
+        `${this.baseUrl}/api/generate`,
+        {
+          model: this.model,
+          prompt: `${systemPrompt}\n\nUser: ${prompt}\n\nAssistant:`,
+          stream: true,
+          options: config
+        },
+        {
+          responseType: 'stream',
+          timeout: 120000
+        }
+      );
+
+      for await (const chunk of response.data) {
+        const data = JSON.parse(chunk.toString());
+        if (data.response) {
+          yield data.response;
+        }
+      }
+    } catch (error) {
+      throw new Error(`Streaming failed: ${error.message}`);
+    }
+  }
+
+  // Health check
   async healthCheck() {
     try {
-      const response = await axios.get(this.baseUrl);
+      const response = await axios.get(this.baseUrl, { timeout: 5000 });
       return response.status === 200;
-    } catch (error) {
+    } catch {
       return false;
     }
   }
 
-  /**
-   * Список доступных моделей
-   */
+  // Список доступных моделей
   async listModels() {
     try {
-      const response = await axios.get(`${this.baseUrl}/api/tags`);
+      const response = await axios.get(`${this.baseUrl}/api/tags`, { timeout: 5000 });
       return response.data.models || [];
     } catch (error) {
-      console.error('Failed to list models:', error.message);
-      return [];
+      throw new Error(`Failed to list models: ${error.message}`);
     }
   }
 
-  /**
-   * Проверка существования модели
-   */
-  async checkModel(modelName) {
-    const models = await this.listModels();
-    return models.some(m => m.name === modelName);
+  // Загрузить новую модель
+  async pullModel(modelName) {
+    try {
+      const response = await axios.post(
+        `${this.baseUrl}/api/pull`,
+        { name: modelName },
+        { timeout: 600000 } // 10 минут на загрузку
+      );
+      return response.data;
+    } catch (error) {
+      throw new Error(`Failed to pull model: ${error.message}`);
+    }
+  }
+
+  // Получить информацию о модели
+  async getModelInfo(modelName = this.model) {
+    try {
+      const response = await axios.post(
+        `${this.baseUrl}/api/show`,
+        { name: modelName },
+        { timeout: 5000 }
+      );
+      return response.data;
+    } catch (error) {
+      throw new Error(`Failed to get model info: ${error.message}`);
+    }
+  }
+
+  // Сравнить разные конфигурации
+  async compareConfigs(prompt, configs) {
+    const results = [];
+    
+    for (const config of configs) {
+      const startTime = Date.now();
+      try {
+        const response = await this.chat(prompt, config);
+        const endTime = Date.now();
+        
+        results.push({
+          config: config.name || JSON.stringify(config),
+          response,
+          duration: endTime - startTime,
+          success: true
+        });
+      } catch (error) {
+        results.push({
+          config: config.name || JSON.stringify(config),
+          error: error.message,
+          success: false
+        });
+      }
+    }
+    
+    return results;
+  }
+
+  // Вспомогательный метод для построения конфига
+  _buildConfig(options) {
+    const { preset, ...customOptions } = options;
+    const presetConfig = preset ? TASK_PRESETS[preset] : {};
+    
+    return {
+      temperature: customOptions.temperature ?? presetConfig.temperature ?? this.defaultConfig.temperature ?? 0.7,
+      top_p: customOptions.top_p ?? presetConfig.top_p ?? this.defaultConfig.top_p ?? 0.9,
+      top_k: customOptions.top_k ?? presetConfig.top_k ?? this.defaultConfig.top_k ?? 40,
+      num_predict: customOptions.num_predict ?? presetConfig.num_predict ?? this.defaultConfig.num_predict ?? 256,
+      repeat_penalty: customOptions.repeat_penalty ?? presetConfig.repeat_penalty ?? this.defaultConfig.repeat_penalty ?? 1.1
+    };
   }
 }
 

@@ -2,7 +2,7 @@ services:
   backend:
     build:
       context: ./server
-      dockerfile: Dockerfile
+    image: luno2/perplexity-backend:latest
     container_name: perplexity-backend
     ports:
       - "4000:4000"
@@ -26,7 +26,7 @@ services:
   frontend:
     build:
       context: ./client
-      dockerfile: Dockerfile
+    image: luno2/perplexity-frontend:latest
     container_name: perplexity-frontend
     ports:
       - "80:80"
@@ -47,7 +47,7 @@ services:
       - |
         ollama serve &
         sleep 5
-        ollama pull ${OLLAMA_MODEL:-gemma2:2b}
+        ollama pull ${OLLAMA_MODEL:-gemma3:4b}
         wait
 
 volumes:

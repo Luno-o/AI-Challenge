@@ -12,6 +12,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { processTeamQuery } from './teamAssistantService.js';
 import { listPullRequests, getPullRequest } from './githubService.js';
+import { OLLAMA_MODELS, TASK_PRESETS } from './ollamaConfig.js';
+import { PROMPT_TEMPLATES, SYSTEM_PROMPTS } from './promptTemplates.js';
 import { callDockerTool, listDockerTools } from './mcpClient.js';
 import {
   orchestrateSetupTestEnv,
@@ -54,11 +56,12 @@ let tokenStats = {
 // ✅ MIDDLEWARE
 app.use(cors({
   origin: [
+       'http://localhost',
     'http://localhost:5173',
     'http://localhost:3000',
     'http://localhost:5174',
     'http://127.0.0.1:5173',
-    'http://YOUR_VPS_IP',              // ← Замените на ваш IP
+    'http://45.90.33.211',              // ← Замените на ваш IP
     'https://YOUR_DOMAIN.com'          // ← Если есть домен
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -134,6 +137,125 @@ app.get('/api/local-llm/models', async (req, res) => {
   res.json({ models });
 });
 
+
+// ═══════════════════════════════════════════════════════════════════
+// 🧪 LLM OPTIMIZATION API
+// ═══════════════════════════════════════════════════════════════════
+
+// Получить доступные модели и конфигурации
+app.get('/api/llm/models', (req, res) => {
+  res.json({
+    success: true,
+    current_model: localLlmClient.model,
+    available_models: OLLAMA_MODELS,
+    task_presets: Object.keys(TASK_PRESETS),
+    system_prompts: Object.keys(SYSTEM_PROMPTS)
+  });
+});
+
+// Протестировать разные конфигурации
+app.post('/api/llm/test-config', async (req, res) => {
+  try {
+    const { prompt, configs } = req.body;
+    
+    if (!prompt || !Array.isArray(configs)) {
+      return res.status(400).json({ error: 'prompt and configs array required' });
+    }
+
+    const results = await localLlmClient.compareConfigs(prompt, configs);
+    
+    res.json({
+      success: true,
+      prompt,
+      results,
+      analysis: {
+        fastest: results.reduce((min, r) => 
+          r.success && r.duration < (min?.duration || Infinity) ? r : min, null
+        ),
+        slowest: results.reduce((max, r) => 
+          r.success && r.duration > (max?.duration || 0) ? r : max, null
+        )
+      }
+    });
+  } catch (error) {
+    console.error('Test config error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Использовать шаблон промпта
+app.post('/api/llm/template', async (req, res) => {
+  try {
+    const { template_name, data, preset } = req.body;
+    
+    if (!template_name || !PROMPT_TEMPLATES[template_name]) {
+      return res.status(400).json({ error: 'Invalid template name' });
+    }
+
+    const prompt = PROMPT_TEMPLATES[template_name](data);
+    const answer = await localLlmClient.chat(prompt, { preset });
+
+    res.json({
+      success: true,
+      template: template_name,
+      prompt,
+      answer,
+      preset: preset || 'default'
+    });
+  } catch (error) {
+    console.error('Template error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Оптимизированный запрос с кастомными параметрами
+app.post('/api/llm/optimized', async (req, res) => {
+  try {
+    const {
+      prompt,
+      temperature,
+      top_p,
+      top_k,
+      num_predict,
+      repeat_penalty,
+      system,
+      preset
+    } = req.body;
+
+    if (!prompt) {
+      return res.status(400).json({ error: 'prompt is required' });
+    }
+
+    const startTime = Date.now();
+    const answer = await localLlmClient.chat(prompt, {
+      temperature,
+      top_p,
+      top_k,
+      num_predict,
+      repeat_penalty,
+      system,
+      preset
+    });
+    const duration = Date.now() - startTime;
+
+    res.json({
+      success: true,
+      answer,
+      duration,
+      config: {
+        temperature,
+        top_p,
+        top_k,
+        num_predict,
+        repeat_penalty,
+        preset
+      }
+    });
+  } catch (error) {
+    console.error('Optimized LLM error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
 // ═══════════════════════════════════════════════════════════════════
 // 🤖 TEAM ASSISTANT API
 // ═══════════════════════════════════════════════════════════════════

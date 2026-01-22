@@ -3,6 +3,8 @@ FROM node:20-alpine
 
 # Установка git и bash для Git MCP
 RUN apk add --no-cache git bash
+# 1. Установить python3, make, g++
+RUN apk add --no-cache python3 make g++ git bash
 
 WORKDIR /app
 
