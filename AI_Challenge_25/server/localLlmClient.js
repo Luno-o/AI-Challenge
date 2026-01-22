@@ -27,10 +27,11 @@ class LocalLlmClient {
           options: {
             temperature: options.temperature || 0.7,
             top_p: options.top_p || 0.9,
+ num_predict: 200  // ✅ Ограничение токенов для скорости
           }
         },
         {
-          timeout: 30000, // 30 секунд таймаут
+          timeout: 300000, // 30 секунд таймаут
           headers: {
             'Content-Type': 'application/json'
           }
