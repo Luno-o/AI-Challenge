@@ -1,0 +1,22 @@
+name: Deploy to VPS with Docker
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /opt/AI_Challenge_25
+            git pull
+            docker-compose down
+            docker-compose up -d --build
+            docker-compose logs --tail=50
