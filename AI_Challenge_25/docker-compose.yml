@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  # Backend (Node.js + Express + MCP)
+  backend:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: perplexity-backend
+    ports:
+      - "4000:4000"
+    environment:
+      - NODE_ENV=production
+      - PORT=4000
+      - PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY}
+      - PERPLEXITY_MODEL=${PERPLEXITY_MODEL}
+      - REPO_PATH=/app
+      - OLLAMA_URL=http://ollama:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL}
+    volumes:
+      - ./server/documents:/app/documents
+      - ./server/indexes:/app/indexes
+      - ./server/tasks.json:/app/tasks.json
+      - ./server/logs:/app/logs
+    depends_on:
+      - ollama
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # Frontend (React + Nginx)
+  frontend:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: perplexity-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # Ollama (Local LLM)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: perplexity-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    restart: unless-stopped
+    networks:
+      - app-network
+    # Автоматически загружает модель при старте
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        ollama serve &
+        sleep 5
+        ollama pull ${OLLAMA_MODEL:-gemma2:2b}
+        wait
+
+volumes:
+  ollama-data:
+    driver: local
+
+networks:
+  app-network:
+    driver: bridge
