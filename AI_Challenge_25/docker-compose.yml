@@ -19,6 +19,8 @@ services:
       - ./server/indexes:/app/indexes
       - ./server/tasks.json:/app/tasks.json
       - ./server/logs:/app/logs
+      - ./server/data:/app/data:rw
+      - ./server/logs:/app/logs:rw
     depends_on:
       - ollama
     restart: unless-stopped

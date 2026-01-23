@@ -4,6 +4,8 @@ import AssistantPage from './pages/AssistantPage';
 import LlmOptimizationPage from './pages/LlmOptimizationPage';
 import SupportPage from './pages/SupportPage';
 import { TeamAssistantPage } from './pages/TeamAssistantPage';
+import AnalyticsPage from "./pages/AnalyticsPage";
+
 import './App.css'; // 👈 Добавим стили
 
 export default function App() {
@@ -19,6 +21,7 @@ export default function App() {
             <Link to="/support" className="nav-link">💬 Support</Link>
             <Link to="/team" className="nav-link">🎯 Team Assistant</Link>
             <Link to="/llm-optimization" className="nav-link">🧪 LLM Lab</Link>
+            <Link to="/analytics" className="nav-link">Analytics</Link> {/* НОВАЯ КНОПКА */}
           </div>
         </div>
       </nav>
@@ -31,6 +34,7 @@ export default function App() {
         <Route path="/support" element={<SupportPage />} />
         <Route path="/team" element={<TeamAssistantPage />} />
         <Route path="/llm-optimization" element={<LlmOptimizationPage />} />
+        <Route path="/analytics" element={<AnalyticsPage />} />
       </Routes>
     </BrowserRouter>
   );

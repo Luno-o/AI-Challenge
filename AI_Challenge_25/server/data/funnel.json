@@ -1,0 +1,27 @@
+[
+  {
+    "step": "landing",
+    "users": 200,
+    "dropoff": 0
+  },
+  {
+    "step": "login",
+    "users": 150,
+    "dropoff": 50
+  },
+  {
+    "step": "mcp",
+    "users": 100,
+    "dropoff": 50
+  },
+  {
+    "step": "rag",
+    "users": 70,
+    "dropoff": 30
+  },
+  {
+    "step": "team-assistant",
+    "users": 50,
+    "dropoff": 20
+  }
+]

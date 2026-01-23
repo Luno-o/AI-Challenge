@@ -6,6 +6,14 @@ class LocalLlmClient {
   constructor() {
     this.baseUrl = process.env.OLLAMA_URL || 'http://localhost:11434';
     this.model = process.env.OLLAMA_MODEL || 'gemma2:2b';
+      console.log(
+    "[Local LLM init] OLLAMA_URL=",
+    process.env.OLLAMA_URL,
+    "OLLAMA_MODEL=",
+    process.env.OLLAMA_MODEL,
+    "-> using model",
+    this.model
+  );
     this.defaultConfig = OLLAMA_MODELS[this.model]?.recommended || {};
   }
 

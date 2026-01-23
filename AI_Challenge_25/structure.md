@@ -582,6 +582,263 @@ app.use(cors({
 
 ✅ Все тесты пройдены (10/10)
 
+
+🧪 LLM Optimization (v1.4.0)
+Описание
+Страница для тестирования и настройки параметров локальной LLM (Ollama). Позволяет:
+
+Просмотреть доступные модели и пресеты
+
+Отправлять запросы с кастомными параметрами (temperature, top_p, top_k, num_predict, repeat_penalty)
+
+Сравнивать производительность разных конфигураций
+
+Использовать готовые шаблоны промптов
+
+Архитектура
+Frontend
+Файл: client/src/pages/LlmOptimizationPage.jsx
+
+Стили: client/src/pages/LlmOptimizationPage.css
+
+Маршрут: /llm-optimization
+
+Backend API
+Endpoint	Method	Body	Description
+/api/llm/models	GET	-	Список моделей, пресетов и системных промптов
+/api/llm/optimized	POST	{prompt, temperature, top_p, top_k, num_predict, repeat_penalty, system, preset}	Запрос с кастомными параметрами
+/api/llm/test-config	POST	{prompt, configs[]}	Сравнение нескольких конфигураций
+/api/llm/template	POST	{template_name, data, preset}	Использование шаблона промпта
+Backend Service Layer
+Файл: server/localLlmClient.js
+
+Конфигурация моделей: server/ollamaConfig.js
+
+js
+export const OLLAMA_MODELS = {
+  'gemma2:2b': { size: '1.6GB', contextWindow: 8192, ... },
+  'llama3.2:3b': { size: '2.0GB', contextWindow: 4096, ... },
+  'mistral:7b': { size: '4.1GB', contextWindow: 8192, ... }
+};
+
+export const TASK_PRESETS = {
+  coding: { temperature: 0.3, top_p: 0.9, ... },
+  creative: { temperature: 0.9, top_p: 0.95, ... },
+  factual: { temperature: 0.5, top_p: 0.85, ... }
+};
+Шаблоны промптов: server/promptTemplates.js
+
+js
+export const PROMPT_TEMPLATES = {
+  task_analysis: (data) => `Проанализируй задачу: ${data.task}...`,
+  code_review: (data) => `Проверь код:\n${data.code}...`,
+  explain_concept: (data) => `Объясни: ${data.concept}...`
+};
+
+export const SYSTEM_PROMPTS = {
+  assistant: 'Ты полезный помощник...',
+  code_expert: 'Ты эксперт по программированию...',
+  debugger: 'Ты специалист по отладке...'
+};
+Пример использования
+bash
+# Получить список моделей и пресетов
+curl http://localhost:4000/api/llm/models
+
+# Отправить запрос с кастомными параметрами
+curl -X POST http://localhost:4000/api/llm/optimized \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "Объясни MCP протокол",
+    "temperature": 0.7,
+    "top_p": 0.9,
+    "preset": "factual"
+  }'
+
+# Сравнить 3 конфигурации
+curl -X POST http://localhost:4000/api/llm/test-config \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "Что такое Docker?",
+    "configs": [
+      {"temperature": 0.5, "top_p": 0.85},
+      {"temperature": 0.7, "top_p": 0.9},
+      {"temperature": 0.9, "top_p": 0.95}
+    ]
+  }'
+🐳 Docker Compose Configuration (v1.4.0)
+Описание
+Локальная разработка через Docker Compose с поддержкой локальной сборки backend/frontend и интеграцией Ollama.
+
+Конфигурация
+Файл: docker-compose.yml
+
+text
+services:
+  backend:
+    build:
+      context: ./server
+    image: luno2/perplexity-backend:latest
+    container_name: perplexity-backend
+    ports:
+      - "4000:4000"
+    environment:
+      - NODE_ENV=production
+      - PORT=4000
+      - PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY}
+      - PERPLEXITY_MODEL=${PERPLEXITY_MODEL}
+      - REPO_PATH=/app
+      - OLLAMA_URL=http://ollama:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL}
+    volumes:
+      - ./server/documents:/app/documents
+      - ./server/indexes:/app/indexes
+      - ./server/tasks.json:/app/tasks.json
+      - ./server/logs:/app/logs
+    depends_on:
+      - ollama
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./client
+    image: luno2/perplexity-frontend:latest
+    container_name: perplexity-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: perplexity-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        ollama serve &
+        sleep 5
+        ollama pull ${OLLAMA_MODEL:-gemma3:4b}
+        wait
+
+volumes:
+  ollama-data:
+Backend Dockerfile
+Файл: server/Dockerfile
+
+text
+FROM node:20-alpine
+
+# Установить build-зависимости для node-gyp/sharp
+RUN apk add --no-cache python3 make g++ git bash
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci --only=production
+
+COPY . .
+
+EXPOSE 4000
+
+CMD ["node", "index.js"]
+Команды запуска
+bash
+# Остановить текущие контейнеры
+docker compose down
+
+# Пересобрать backend/frontend из локального кода
+docker compose build backend frontend
+
+# Запустить всё
+docker compose up -d backend frontend ollama
+
+# Проверка статуса
+docker compose ps
+
+# Логи
+docker compose logs backend --tail=50
+docker compose logs ollama --tail=50
+Environment Variables
+Файл: .env (корень проекта)
+
+bash
+# Perplexity API
+PERPLEXITY_API_KEY=pplx-xxxxxxxxxxxx
+PERPLEXITY_MODEL=sonar
+
+# Ollama
+OLLAMA_MODEL=gemma3:4b
+🌐 CORS Configuration (v1.4.0)
+Описание
+Настройки CORS для поддержки запросов с фронтенда на http://localhost (Nginx, порт 80) к бэкенду на http://localhost:4000.
+
+Backend CORS Setup
+Файл: server/index.js
+
+js
+app.use(cors({
+  origin: [
+    'http://localhost',           // Nginx (Docker frontend на порту 80)
+    'http://127.0.0.1',
+    'http://localhost:5173',      // Vite dev server
+    'http://localhost:3000',
+    'http://localhost:5174',
+    'http://127.0.0.1:5173',
+    'http://YOUR_VPS_IP',         // Production VPS
+    'https://YOUR_DOMAIN.com'     // Production domain
+  ],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+Troubleshooting CORS
+Ошибка: Access to fetch at 'http://localhost:4000/api/llm/models' from origin 'http://localhost' has been blocked by CORS policy
+
+Решение:
+
+Добавить http://localhost и http://127.0.0.1 в cors({ origin: [...] })
+
+Пересобрать backend:
+
+bash
+docker compose build backend
+docker compose up -d backend
+Проверить в браузере: ошибка должна исчезнуть, запросы проходят
+
+Проверка CORS через curl:
+
+bash
+curl -X OPTIONS http://localhost:4000/api/llm/models \
+  -H "Origin: http://localhost" \
+  -H "Access-Control-Request-Method: GET" \
+  -v
+Ожидаемый заголовок в ответе:
+
+text
+Access-Control-Allow-Origin: http://localhost
+Версионирование
+Версия: v1.4.0
+Дата обновления: 2026-01-23 02:06 MSK
+Статус: ✅ Production Ready + LLM Optimization + Docker Compose
+
+Изменения v1.4.0:
+🧪 LLM Optimization — страница и API для тестирования локальной LLM
+
+📦 ollamaConfig.js / promptTemplates.js — конфигурация моделей, пресетов и шаблонов
+
+🐳 Docker Compose — локальная сборка backend/frontend, интеграция Ollama
+
+🌐 CORS — поддержка http://localhost для фронта на Nginx (порт 80)
+
+🔧 Backend Dockerfile — добавлен Python/g++/make для сборки sharp
+
+
 Roadmap
 v1.4.0 (Next Release)
 ☁️ Ollama в Docker для production deployment

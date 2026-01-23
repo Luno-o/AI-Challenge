@@ -18,5 +18,8 @@ optional.forEach(key => {
   const value = process.env[key];
   console.log(`  ${value ? '✅' : '⚠️'} ${key}: ${value || 'default'}`);
 });
-
+console.log("PERPLEXITY_API_KEY =", process.env.PERPLEXITY_API_KEY?.slice(0, 10));
+console.log("REPO_PATH          =", process.env.REPO_PATH);
+console.log("OLLAMA_URL         =", process.env.OLLAMA_URL);
+console.log("OLLAMA_MODEL       =", process.env.OLLAMA_MODEL);
 console.log('\n=== END CHECK ===');

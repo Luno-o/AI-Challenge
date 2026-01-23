@@ -8,15 +8,18 @@
     "start": "node index.js",
     "dev": "node index.js",
     "test:rag": "bash test-rag-compare.sh",
-    "mcp:documents": "node documents-mcp.js"
+    "mcp:documents": "node documents-mcp.js",
+    "seed:analytics": "node ./scripts/seedAnalyticsData.js",
+    "test:env": "node check-env.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "0.5.0",
     "@xenova/transformers": "^2.17.2",
     "axios": "^1.6.0",
     "cors": "^2.8.5",
+    "csv-parse": "^6.1.0",
     "dockerode": "^4.0.0",
-    "dotenv": "^16.3.1",
+    "dotenv": "^16.6.1",
     "express": "^4.18.2",
     "node-cron": "^4.2.1",
     "node-fetch": "^2.7.0",

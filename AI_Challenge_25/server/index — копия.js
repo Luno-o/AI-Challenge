@@ -1,11 +1,18 @@
-import "./check-env.js";
+
+import "./envBootstrap.js";
+
+
+console.log("[ENV BOOT] OLLAMA_MODEL =", process.env.OLLAMA_MODEL);
 import express from 'express';
 import fetch from 'node-fetch';
+
 import { execSync } from 'child_process';
+
 
 import cors from 'cors';
 import { analyticsChat } from "./analyticsChatService.js";
 import { analyzeData } from "./analyticsService.js";
+import localLlmClient from './localLlmClient.js';
 import { reviewPullRequest } from './prReviewService.js';
 import { initGitMcpClient } from './gitMcpClient.js';
 import { processAssistantCommand } from './assistantService.js';
@@ -33,10 +40,10 @@ import {
 } from './ragService.js';
 import { callDocumentTool } from './ragMcpClient.js';
 import { processUserQuestion } from './supportAssistantService.js';
-import localLlmClient from './localLlmClient.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
 
 if (!process.env.PERPLEXITY_API_KEY) {
   console.error('❌ PERPLEXITY_API_KEY not found in .env file!');
