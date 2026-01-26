@@ -1,281 +1,362 @@
 // client/src/pages/TeamAssistantPage.jsx
-import React, { useState } from 'react';
-import { useTeamAssistant } from '../hooks/useTeamAssistant';
+
+import React, { useState, useRef, useEffect } from 'react';
 import '../styles/TeamAssistantPage.css';
 
-export const TeamAssistantPage = () => {
-  const [query, setQuery] = useState('');
-  const [messages, setMessages] = useState([]);
-  const [llmProvider, setLlmProvider] = useState('perplexity');
+const TeamAssistantPage = () => {
+  // ========================================
+  // STATE
+  // ========================================
   
-  const { ask, loading } = useTeamAssistant();
-
-  const handleAsk = async () => {
-    if (!query.trim()) return;
-
-    const userMessage = { role: 'user', content: query };
-    setMessages(prev => [...prev, userMessage]);
-
-    const actualQuery = llmProvider === 'local' 
-      ? `Спроси локальную: ${query}` 
-      : query;
-
-    const result = await ask(actualQuery);
-
-    if (result.success) {
-      setMessages(prev => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: result.answer,
-          tasks: result.tasks,
-          recommendation: result.recommendation,
-          git_context: result.git_context,
-          task_stats: result.task_stats,
-          sources: result.sources,
-          next_actions: result.next_actions,
-          commits: result.commits,
-          model: result.model,
-          source: result.source,
-        },
-      ]);
-    } else {
-      setMessages(prev => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: result.answer || '⚠️ Ошибка обработки',
-          error: true,
-        },
-      ]);
+  const [messages, setMessages] = useState([
+    {
+      type: 'assistant',
+      content: 'Привет! 👋 Я твой ассистент. Как я могу помочь?',
+      metadata: { timestamp: new Date() }
     }
+  ]);
 
-    setQuery('');
+  const [inputValue, setInputValue] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [llmMode, setLlmMode] = useState('ollama');
+  const [personalizationEnabled, setPersonalizationEnabled] = useState(false);
+  const [userProfile, setUserProfile] = useState(null);
+  const [userId] = useState('luno-o'); // Можно сделать динамичным
+
+  const messagesEndRef = useRef(null);
+  const inputRef = useRef(null);
+
+  // ========================================
+  // EFFECTS
+  // ========================================
+
+  // Скролл к последнему сообщению
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  // Загрузить профиль при включении персонализации
+  useEffect(() => {
+    if (personalizationEnabled && userId) {
+      loadUserProfile();
+    }
+  }, [personalizationEnabled, userId]);
+
+  // ========================================
+  // HANDLERS
+  // ========================================
+
+  /**
+   * Загрузить профиль пользователя
+   */
+  const loadUserProfile = async () => {
+    try {
+      console.log(`[Frontend] Loading profile for ${userId}`);
+      
+      const response = await fetch(
+        `http://localhost:5000/api/personalization/profile/${userId}`
+      );
+
+      if (!response.ok) {
+        console.warn(`[Frontend] Profile not found for ${userId}`);
+        return;
+      }
+
+      const data = await response.json();
+      setUserProfile(data.profile);
+      
+      console.log(`[Frontend] Profile loaded:`, data.profile.name);
+    } catch (error) {
+      console.error('[Frontend] Error loading profile:', error);
+    }
   };
 
-  const handleQuickAction = (text) => {
-    setQuery(text);
-    setTimeout(() => handleAsk(), 100);
+  /**
+   * Отправить сообщение
+   */
+  const handleSendMessage = async (e) => {
+    e.preventDefault();
+
+    if (!inputValue.trim()) return;
+
+    // Добавить сообщение пользователя
+    const userMessage = {
+      type: 'user',
+      content: inputValue,
+      metadata: { timestamp: new Date() }
+    };
+
+    setMessages(prev => [...prev, userMessage]);
+    setInputValue('');
+    setLoading(true);
+
+    try {
+      console.log('[Frontend] Sending query...');
+      console.log(`[Frontend] LLM: ${llmMode}`);
+      console.log(`[Frontend] Personalization: ${personalizationEnabled}`);
+
+      // Отправить запрос на backend
+      const response = await fetch('http://localhost:5000/api/team/ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: inputValue,
+          llmMode,
+          personalizationEnabled,
+          user_id: personalizationEnabled ? userId : null
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      // Добавить ответ ассистента с метаданными
+      const assistantMessage = {
+        type: 'assistant',
+        content: data.answer,
+        metadata: {
+          timestamp: new Date(data.timestamp),
+          personalized: data.personalized,
+          personalizationProfile: data.personalizationProfile,
+          llmUsed: data.llmUsed
+        }
+      };
+
+      setMessages(prev => [...prev, assistantMessage]);
+      console.log('[Frontend] Response received');
+
+    } catch (error) {
+      console.error('[Frontend] Error sending message:', error);
+
+      const errorMessage = {
+        type: 'assistant',
+        content: `❌ Ошибка: ${error.message}. Проверь, что backend запущен на http://localhost:5000`,
+        metadata: { timestamp: new Date(), error: true }
+      };
+
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setLoading(false);
+      inputRef.current?.focus();
+    }
+  };
+
+  /**
+   * Переключить персонализацию
+   */
+  const handleTogglePersonalization = () => {
+    setPersonalizationEnabled(!personalizationEnabled);
+  };
+
+  /**
+   * Переключить LLM
+   */
+  const handleSwitchLLM = () => {
+    const newMode = llmMode === 'ollama' ? 'perplexity' : 'ollama';
+    setLlmMode(newMode);
+    console.log(`[Frontend] Switched to ${newMode}`);
+  };
+
+  /**
+   * Очистить чат
+   */
+  const handleClearChat = () => {
+    if (window.confirm('Очистить весь чат?')) {
+      setMessages([
+        {
+          type: 'assistant',
+          content: 'Чат очищен. Как я могу помочь?',
+          metadata: { timestamp: new Date() }
+        }
+      ]);
+    }
+  };
+
+  // ========================================
+  // RENDERING
+  // ========================================
+
+  const getMessageTime = (timestamp) => {
+    return new Date(timestamp).toLocaleTimeString('ru-RU', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
 
   return (
-    <div className="team-assistant">
-      {/* Header */}
-      <div className="header">
-        <h1>🤖 Team Assistant</h1>
-        <p className="subtitle">
-          Управление задачами, Git, документацией и локальной LLM
-        </p>
+    <div className="team-assistant-container">
+      {/* ========== HEADER ========== */}
+      <header className="team-assistant-header">
+        <div className="header-left">
+          <h1>🤖 Team Assistant</h1>
+          <p>Персонализированный AI помощник разработчика</p>
+        </div>
+
+        <div className="header-right">
+          {/* Профиль пользователя */}
+          {personalizationEnabled && userProfile && (
+            <div className="user-profile-badge">
+              <span className="profile-avatar">👤</span>
+              <div className="profile-info">
+                <div className="profile-name">{userProfile.name}</div>
+                <div className="profile-role">{userProfile.role}</div>
+              </div>
+            </div>
+          )}
+        </div>
+      </header>
+
+      {/* ========== CONTROLS ========== */}
+      <div className="team-assistant-controls">
+        {/* Кнопка персонализации */}
+        <button
+          className={`btn-personalization ${personalizationEnabled ? 'active' : ''}`}
+          onClick={handleTogglePersonalization}
+          title={personalizationEnabled ? 'Отключить персонализацию' : 'Включить персонализацию'}
+        >
+          <span className="btn-icon">🎯</span>
+          <span className="btn-text">
+            {personalizationEnabled ? 'Персонализация: ВКЛ' : 'Персонализация: ВЫКЛ'}
+          </span>
+        </button>
+
+        {/* LLM Switcher */}
+        <button
+          className="btn-llm-switch"
+          onClick={handleSwitchLLM}
+          title="Переключить LLM модель"
+        >
+          <span className="btn-icon">{llmMode === 'ollama' ? '🏠' : '☁️'}</span>
+          <span className="btn-text">{llmMode === 'ollama' ? 'Ollama' : 'Perplexity'}</span>
+        </button>
+
+        {/* Очистить чат */}
+        <button
+          className="btn-clear"
+          onClick={handleClearChat}
+          title="Очистить историю чата"
+        >
+          <span className="btn-icon">🗑️</span>
+          <span className="btn-text">Очистить</span>
+        </button>
       </div>
 
-      {/* Quick Actions */}
-      <div className="quick-actions">
-        <button className="quick-btn" onClick={() => handleQuickAction('Покажи все задачи')}>
-          📋 Все задачи
-        </button>
-        <button className="quick-btn" onClick={() => handleQuickAction('Что делать первым?')}>
-          🎯 Рекомендация
-        </button>
-        <button className="quick-btn" onClick={() => handleQuickAction('Статус проекта')}>
-          📊 Статус
-        </button>
-        <button className="quick-btn primary" onClick={() => handleQuickAction('Создай задачу: исправить баг, приоритет high')}>
-          ➕ Создать задачу
-        </button>
-      </div>
+      {/* ========== MESSAGES ========== */}
+      <div className="messages-container">
+        {messages.map((msg, idx) => (
+          <div key={idx} className={`message message-${msg.type}`}>
+            <div className="message-avatar">
+              {msg.type === 'user' ? '👨‍💻' : '🤖'}
+            </div>
 
-      {/* Messages Area */}
-      <div className="messages">
-        {messages.length === 0 ? (
-          <div className="welcome">
-            <h2>👋 Привет! Я твой Team Assistant</h2>
-            <p>Я помогу с задачами, Git, документацией и могу использовать локальную LLM</p>
-            <ul>
-              <li>📋 Управление задачами (создание, просмотр, рекомендации)</li>
-              <li>🔀 Git операции (статус, коммиты, история)</li>
-              <li>📚 Поиск в документации (RAG)</li>
-              <li>🤖 Локальная LLM через Ollama</li>
-            </ul>
-          </div>
-        ) : (
-          messages.map((msg, idx) => (
-            <div key={idx} className={`message ${msg.role}`}>
-              {/* Message Header */}
-              <div className="message-header" style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
-                <span style={{ fontWeight: 600, color: msg.role === 'user' ? '#667eea' : '#333' }}>
-                  {msg.role === 'user' ? '👤 Вы' : '🤖 Assistant'}
-                </span>
-                {msg.model && (
-                  <span className="message-model">
-                    {msg.source === 'local_llm' ? '🤖 Ollama' : '🌐 Perplexity'} ({msg.model})
-                  </span>
-                )}
+            <div className="message-content-wrapper">
+              <div className="message-content">
+                <p>{msg.content}</p>
               </div>
 
-              {/* Message Content */}
-              <div
-                className="message-content"
-                dangerouslySetInnerHTML={{
-                  __html: msg.content
-                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                    .replace(/`([^`]+)`/g, '<code>$1</code>')
-                    .replace(/\n/g, '<br/>'),
-                }}
-              />
+              {/* Метаданные */}
+              {msg.metadata && (
+                <div className="message-metadata">
+                  <span className="timestamp">
+                    {getMessageTime(msg.metadata.timestamp)}
+                  </span>
 
-              {/* Tasks List */}
-              {msg.tasks && msg.tasks.length > 0 && (
-                <div className="tasks-list">
-                  <h4>📋 Задачи ({msg.tasks.length})</h4>
-                  {msg.tasks.map((task) => (
-                    <div key={task.id} className={`task-card priority-${task.priority}`}>
-                      <div className="task-header">
-                        <span className="task-id">#{task.id}</span>
-                        <span className={`priority-badge ${task.priority}`}>{task.priority}</span>
-                        <span className={`status-badge ${task.status}`}>{task.status}</span>
-                        {task.score && <span className="score">⭐ {task.score}</span>}
-                      </div>
-                      <div className="task-title">{task.title}</div>
-                      {task.description && <div className="task-meta">{task.description}</div>}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Git Context */}
-              {msg.git_context && (
-                <div className="git-context">
-                  <span className="git-badge">🌿 {msg.git_context.branch}</span>
-                  {msg.git_context.modified_files > 0 && (
-                    <span className="git-badge modified">
-                      📝 {msg.git_context.modified_files} изменено
+                  {/* Индикатор персонализации */}
+                  {msg.metadata.personalized && (
+                    <span className="badge badge-personalized" title="Ответ персонализирован">
+                      🎯 Персонализировано
                     </span>
                   )}
-                  {msg.git_context.staged_files > 0 && (
-                    <span className="git-badge staged">
-                      ✅ {msg.git_context.staged_files} staged
+
+                  {/* Индикатор LLM */}
+                  {msg.metadata.llmUsed && (
+                    <span
+                      className={`badge badge-llm badge-${msg.metadata.llmUsed}`}
+                      title={`LLM: ${msg.metadata.llmUsed}`}
+                    >
+                      {msg.metadata.llmUsed === 'ollama' ? '🏠 Ollama' : '☁️ Perplexity'}
                     </span>
                   )}
-                </div>
-              )}
 
-              {/* Task Stats */}
-              {msg.task_stats && (
-                <div className="stats-grid">
-                  <div className="stat-card success">
-                    <span className="stat-value">{msg.task_stats.done}</span>
-                    <span className="stat-label">Выполнено</span>
-                  </div>
-                  <div className="stat-card warning">
-                    <span className="stat-value">{msg.task_stats.in_progress}</span>
-                    <span className="stat-label">В работе</span>
-                  </div>
-                  <div className="stat-card">
-                    <span className="stat-value">{msg.task_stats.todo}</span>
-                    <span className="stat-label">Запланировано</span>
-                  </div>
-                  {msg.task_stats.high_priority > 0 && (
-                    <div className="stat-card danger">
-                      <span className="stat-value">{msg.task_stats.high_priority}</span>
-                      <span className="stat-label">Высокий приоритет</span>
-                    </div>
+                  {/* Профиль в метаданных */}
+                  {msg.metadata.personalizationProfile && (
+                    <span className="badge badge-profile">
+                      👤 {msg.metadata.personalizationProfile}
+                    </span>
                   )}
-                </div>
-              )}
-
-              {/* Next Actions */}
-              {msg.next_actions && msg.next_actions.length > 0 && (
-                <div className="next-actions">
-                  <h4>🚀 Следующие шаги:</h4>
-                  <ul>
-                    {msg.next_actions.map((action, i) => (
-                      <li key={i}>{action}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* Sources (RAG) */}
-              {msg.sources && msg.sources.length > 0 && (
-                <div className="sources">
-                  <h4>📚 Источники:</h4>
-                  {msg.sources.map((src, i) => (
-                    <div key={i} className="source-card">
-                      <div className="source-header">
-                        <strong>📄 {src.document}</strong>
-                        {src.relevance && (
-                          <span className="relevance">{src.relevance}%</span>
-                        )}
-                      </div>
-                      {src.preview && (
-                        <div className="source-preview">{src.preview}</div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Commits */}
-              {msg.commits && msg.commits.length > 0 && (
-                <div className="commits-list">
-                  {msg.commits.map((commit, i) => (
-                    <div key={i} className="commit-card">
-                      <code>{commit.hash.substring(0, 7)}</code>
-                      <span>{commit.message}</span>
-                      <small>{commit.author}</small>
-                    </div>
-                  ))}
                 </div>
               )}
             </div>
-          ))
-        )}
+          </div>
+        ))}
 
-        {/* Loading Indicator */}
+        {/* Индикатор загрузки */}
         {loading && (
-          <div className="message loading">
-            <div className="loader">⏳ Думаю...</div>
+          <div className="message message-assistant loading">
+            <div className="message-avatar">🤖</div>
+            <div className="message-content-wrapper">
+              <div className="message-content">
+                <div className="typing-indicator">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
+              </div>
+            </div>
           </div>
         )}
+
+        <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Area with LLM Selector */}
-      <div className="team-assistant-input-container">
-        <div className="llm-provider-selector">
-          <button
-            className={`llm-provider-btn ${llmProvider === 'perplexity' ? 'active' : ''}`}
-            onClick={() => setLlmProvider('perplexity')}
-            title="Perplexity API (онлайн, умный анализ)"
-          >
-            🌐 Perplexity
-          </button>
-          <button
-            className={`llm-provider-btn ${llmProvider === 'local' ? 'active' : ''}`}
-            onClick={() => setLlmProvider('local')}
-            title="Локальная LLM (Ollama)"
-          >
-            🤖 Ollama
-          </button>
+      {/* ========== INPUT ========== */}
+      <form className="input-form" onSubmit={handleSendMessage}>
+        <input
+          ref={inputRef}
+          type="text"
+          className="message-input"
+          placeholder="Введи вопрос или команду..."
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
+          disabled={loading}
+          autoFocus
+        />
+        <button
+          type="submit"
+          className="btn-send"
+          disabled={loading || !inputValue.trim()}
+          title="Отправить сообщение"
+        >
+          <span className="btn-icon">📤</span>
+        </button>
+      </form>
+
+      {/* ========== STATUS BAR ========== */}
+      <div className="status-bar">
+        <div className="status-item">
+          <span className="status-label">LLM:</span>
+          <span className={`status-value llm-${llmMode}`}>
+            {llmMode === 'ollama' ? '🏠 Ollama (локальная)' : '☁️ Perplexity (облако)'}
+          </span>
         </div>
 
-        <div className="team-assistant-input">
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && !loading && handleAsk()}
-            placeholder={
-              llmProvider === 'local'
-                ? "Спроси локальную LLM..."
-                : "Спроси Team Assistant..."
-            }
-            disabled={loading}
-          />
-          <button onClick={handleAsk} disabled={loading || !query.trim()}>
-            {loading ? '⏳' : '📤'}
-          </button>
+        <div className="status-item">
+          <span className="status-label">Персонализация:</span>
+          <span className={`status-value personalization-${personalizationEnabled}`}>
+            {personalizationEnabled ? '✅ ВКЛ' : '❌ ВЫКЛ'}
+          </span>
+        </div>
+
+        <div className="status-item">
+          <span className="status-label">Сообщений:</span>
+          <span className="status-value">{messages.length}</span>
         </div>
       </div>
     </div>
   );
 };
+
+export default TeamAssistantPage;

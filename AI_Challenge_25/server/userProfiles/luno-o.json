@@ -1,0 +1,25 @@
+{
+  "user_id": "luno-o",
+  "name": "Сергей",
+  "role": "FullStack Developer & AI Engineer",
+  "primaryLanguage": "Russian",
+  "workStyle": "technical, direct, pragmatic",
+  "preferences": {
+    "responseStyle": "краткий ответ с примерами кода",
+    "codeLanguages": ["JavaScript", "TypeScript", "Node.js", "React"],
+    "favoriteTools": ["Docker", "Git", "MCP", "Ollama"],
+    "timeZone": "MSK",
+    "communicationTone": "профессиональный, но непринужденный"
+  },
+  "habits": {
+    "usesLocalLlmPreferentially": true,
+    "debugsVerbosely": true,
+    "prefersArchitectureFirst": true,
+    "opensourceFan": true
+  },
+  "projectContext": {
+    "currentProject": "perplexity-chat: MCP integration + RAG + Local LLM (Ollama)",
+    "teamSize": 1,
+    "techStack": ["Node.js 20", "React 18", "Ollama", "Perplexity API", "Docker", "Railway", "Vercel"]
+  }
+}

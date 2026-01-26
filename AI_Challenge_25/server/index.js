@@ -4,6 +4,7 @@ import fetch from 'node-fetch';
 import { execSync } from 'child_process';
 
 import cors from 'cors';
+import userPersonalizationService from './userPersonalizationService.js';
 import { analyticsChat } from "./analyticsChatService.js";
 import { analyzeData } from "./analyticsService.js";
 import { reviewPullRequest } from './prReviewService.js';
@@ -284,21 +285,236 @@ app.post('/api/llm/optimized', async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════
 // 🤖 TEAM ASSISTANT API
 // ═══════════════════════════════════════════════════════════════════
+
+
 app.post('/api/team/ask', async (req, res) => {
-  const { query, user_id } = req.body;
+  const {
+    query,
+    user_id = 'team_user',
+    llmMode = 'ollama',
+    personalizationEnabled = false,
+  } = req.body;
 
   if (!query) {
-    return res.status(400).json({ error: 'query обязателен' });
+    return res.status(400).json({ success: false, error: 'query is required' });
   }
 
   try {
-    const result = await processTeamQuery(query, user_id || 'team_user');
-    res.json(result);
+    console.log(`[Team API] Query: "${query.substring(0, 50)}..."`);
+    console.log(
+      `[Team API] User: ${user_id}, Mode: ${llmMode}, Personalized: ${personalizationEnabled}`
+    );
+
+    const result = await processTeamQuery(
+      query,
+      user_id,
+      llmMode,
+      personalizationEnabled
+    );
+
+    const response = {
+      success: true,
+      ...result,
+      request_metadata: {
+        user_id,
+        llm_mode: llmMode,
+        personalization_enabled: personalizationEnabled,
+        timestamp: new Date().toISOString(),
+      },
+    };
+
+    res.json(response);
   } catch (error) {
     console.error('[API /team/ask] Error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      request_metadata: {
+        user_id,
+        llm_mode: llmMode,
+        personalization_enabled: personalizationEnabled,
+        timestamp: new Date().toISOString(),
+      },
+    });
   }
 });
+
+
+/**
+ * GET /api/personalization/profile/:user_id
+ */
+app.get('/api/personalization/profile/:user_id', async (req, res) => {
+  try {
+    const { user_id } = req.params;
+    
+    if (!user_id) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'user_id is required' 
+      });
+    }
+
+    const profile = await userPersonalizationService.loadProfile(user_id);
+    
+    if (!profile) {
+      return res.status(404).json({
+        success: false,
+        error: `Profile not found for user: ${user_id}`
+      });
+    }
+
+    res.json({
+      success: true,
+      profile
+    });
+
+  } catch (error) {
+    console.error('[GET /personalization/profile] Error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/personalization/systemPrompt/:user_id
+ */
+app.get('/api/personalization/systemPrompt/:user_id', async (req, res) => {
+  try {
+    const { user_id } = req.params;
+    const { query } = req.query;
+
+    if (!user_id) {
+      return res.status(400).json({
+        success: false,
+        error: 'user_id is required'
+      });
+    }
+
+    const systemPrompt = await userPersonalizationService.getSystemPromptForQuery(
+      user_id,
+      query || 'general query'
+    );
+
+    if (!systemPrompt) {
+      return res.status(404).json({
+        success: false,
+        error: `Could not generate prompt for user: ${user_id}`
+      });
+    }
+
+    res.json({
+      success: true,
+      user_id,
+      system_prompt: systemPrompt,
+      length: systemPrompt.length
+    });
+
+  } catch (error) {
+    console.error('[GET /personalization/systemPrompt] Error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/personalization/profiles
+ */
+app.get('/api/personalization/profiles', async (req, res) => {
+  try {
+    const profiles = await userPersonalizationService.listProfiles();
+
+    res.json({
+      success: true,
+      count: profiles.length,
+      profiles: profiles.map(p => ({
+        user_id: p.user_id,
+        name: p.name,
+        role: p.role,
+        created_at: p.created_at
+      }))
+    });
+
+  } catch (error) {
+    console.error('[GET /personalization/profiles] Error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/personalization/save
+ */
+app.post('/api/personalization/save', async (req, res) => {
+  try {
+    const profile = req.body;
+
+    if (!profile.user_id) {
+      return res.status(400).json({
+        success: false,
+        error: 'user_id is required in profile'
+      });
+    }
+
+    const saved = await userPersonalizationService.saveProfile(profile);
+
+    res.json({
+      success: true,
+      message: 'Profile saved successfully',
+      profile: saved
+    });
+
+  } catch (error) {
+    console.error('[POST /personalization/save] Error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * DELETE /api/personalization/profile/:user_id
+ */
+app.delete('/api/personalization/profile/:user_id', async (req, res) => {
+  try {
+    const { user_id } = req.params;
+
+    if (!user_id) {
+      return res.status(400).json({
+        success: false,
+        error: 'user_id is required'
+      });
+    }
+
+    const deleted = await userPersonalizationService.deleteProfile(user_id);
+
+    if (!deleted) {
+      return res.status(404).json({
+        success: false,
+        error: `Profile not found for user: ${user_id}`
+      });
+    }
+
+    res.json({
+      success: true,
+      message: `Profile deleted for user: ${user_id}`
+    });
+
+  } catch (error) {
+    console.error('[DELETE /personalization/profile] Error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 
 // ========== PR REVIEW ENDPOINTS ==========
 

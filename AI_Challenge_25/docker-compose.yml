@@ -1,56 +1,99 @@
-services:
-  backend:
-    build:
-      context: ./server
-    image: luno2/perplexity-backend:latest
-    container_name: perplexity-backend
-    ports:
-      - "4000:4000"
-    environment:
-      - NODE_ENV=production
-      - PORT=4000
-      - PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY}
-      - PERPLEXITY_MODEL=${PERPLEXITY_MODEL}
-      - REPO_PATH=/app
-      - OLLAMA_URL=http://ollama:11434
-      - OLLAMA_MODEL=${OLLAMA_MODEL}
-    volumes:
-      - ./server/documents:/app/documents
-      - ./server/indexes:/app/indexes
-      - ./server/tasks.json:/app/tasks.json
-      - ./server/logs:/app/logs
-      - ./server/data:/app/data:rw
-      - ./server/logs:/app/logs:rw
-    depends_on:
-      - ollama
-    restart: unless-stopped
+# docker-compose.yml
 
+version: '3.8'
+
+services:
+  # ========================================
+  # FRONTEND (React)
+  # ========================================
   frontend:
     build:
-      context: ./client
-    image: luno2/perplexity-frontend:latest
-    container_name: perplexity-frontend
+      context: .
+      dockerfile: Dockerfile
+      target: frontend
+    container_name: perplexity-chat-frontend
+    working_dir: /app/client
     ports:
-      - "80:80"
+      - "5173:5173"
+    environment:
+      - REACT_APP_API_URL=http://backend:5000
+      - REACT_APP_NODE_ENV=development
     depends_on:
       - backend
-    restart: unless-stopped
+    networks:
+      - perplexity-network
+    volumes:
+      - ./client:/app/client
+      - /app/client/node_modules
+    command: npm run dev -- --host 0.0.0.0 --port 5173
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5173"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
+  # ========================================
+  # BACKEND (Node.js)
+  # ========================================
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: backend
+    container_name: perplexity-chat-backend
+    ports:
+      - "5000:5000"
+    environment:
+      - NODE_ENV=development
+      - PORT=5000
+      - CORS_ORIGIN=http://localhost:3000
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY:-}
+      - PERSONALIZATION_ENABLED=true
+    # depends_on:
+      # ollama:
+        # condition: service_healthy
+    networks:
+      - perplexity-network
+    volumes:
+      - ./server:/app/server
+      - ./server/userProfiles:/app/server/userProfiles
+      - /app/server/node_modules
+    command: npm start
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # ========================================
+  # OLLAMA (Local LLM Server)
+  # ========================================
   ollama:
     image: ollama/ollama:latest
-    container_name: perplexity-ollama
+    container_name: perplexity-chat-ollama
     ports:
       - "11434:11434"
+    environment:
+      - OLLAMA_HOST=0.0.0.0:11434
+    networks:
+      - perplexity-network
     volumes:
       - ollama-data:/root/.ollama
-    restart: unless-stopped
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        ollama serve &
-        sleep 5
-        ollama pull ${OLLAMA_MODEL:-gemma3:4b}
-        wait
+    command: serve
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+networks:
+  perplexity-network:
+    driver: bridge
 
 volumes:
   ollama-data:
+    driver: local

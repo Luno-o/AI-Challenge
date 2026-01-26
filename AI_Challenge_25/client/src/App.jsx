@@ -1,17 +1,18 @@
 import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
+
 import ChatPage from './pages/ChatPage';
 import AssistantPage from './pages/AssistantPage';
 import LlmOptimizationPage from './pages/LlmOptimizationPage';
 import SupportPage from './pages/SupportPage';
-import { TeamAssistantPage } from './pages/TeamAssistantPage';
-import AnalyticsPage from "./pages/AnalyticsPage";
+import TeamAssistantPage from './pages/TeamAssistantPage';
+import AnalyticsPage from './pages/AnalyticsPage';
 
-import './App.css'; // 👈 Добавим стили
+import './App.css';
 
 export default function App() {
   return (
     <BrowserRouter>
-      {/* 👇 НАВИГАЦИОННОЕ МЕНЮ */}
+      {/* Навигация */}
       <nav className="main-nav">
         <div className="nav-container">
           <h1 className="nav-logo">🤖 AI Assistant</h1>
@@ -21,12 +22,12 @@ export default function App() {
             <Link to="/support" className="nav-link">💬 Support</Link>
             <Link to="/team" className="nav-link">🎯 Team Assistant</Link>
             <Link to="/llm-optimization" className="nav-link">🧪 LLM Lab</Link>
-            <Link to="/analytics" className="nav-link">Analytics</Link> {/* НОВАЯ КНОПКА */}
+            <Link to="/analytics" className="nav-link">Analytics</Link>
           </div>
         </div>
       </nav>
 
-      {/* РОУТЫ */}
+      {/* Роуты */}
       <Routes>
         <Route path="/" element={<ChatPage />} />
         <Route path="/chat" element={<ChatPage />} />

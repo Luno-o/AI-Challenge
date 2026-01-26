@@ -1,36 +1,34 @@
-// server/teamAssistantService.js
 import fetch from 'node-fetch';
 import { callTaskTool } from './mcpClient.js';
 import { callGitTool } from './gitMcpClient.js';
 import { answerWithRagViaMcp } from './ragService.js';
 import localLlmClient from './localLlmClient.js';
+import userPersonalizationService from './userPersonalizationService.js';
 
 // ═══════════════════════════════════════════════════════════════════
 // 🛡️ SAFE MCP RESPONSE PARSER
 // ═══════════════════════════════════════════════════════════════════
+
 function parseMcpResponse(mcpResult, toolName = 'MCP') {
-      console.log(`[${toolName}] Raw input:`, JSON.stringify(mcpResult).substring(0, 200)); // 🔍 Debug
+  console.log(`[${toolName}] Raw input:`, JSON.stringify(mcpResult).substring(0, 200));
+
   try {
     if (!mcpResult) {
       throw new Error(`${toolName}: No response received`);
     }
 
-    // Формат 1: {content: [{text: "..."}]}
     if (mcpResult.content && Array.isArray(mcpResult.content) && mcpResult.content[0]?.text) {
       return JSON.parse(mcpResult.content[0].text);
     }
 
-    // Формат 2: {text: "..."}
     if (mcpResult.text) {
       return JSON.parse(mcpResult.text);
     }
 
-    // Формат 3: уже распарсенный объект
     if (typeof mcpResult === 'object' && !mcpResult.content) {
       return mcpResult;
     }
 
-    // Формат 4: строка JSON
     if (typeof mcpResult === 'string') {
       return JSON.parse(mcpResult);
     }
@@ -42,6 +40,48 @@ function parseMcpResponse(mcpResult, toolName = 'MCP') {
     console.error(`[${toolName}] Raw response:`, mcpResult);
     throw new Error(`${toolName} parsing failed: ${error.message}`);
   }
+}
+
+async function callPerplexityWithSystemPrompt(systemPrompt, userQuestion, summaryJson) {
+  const apiKey = process.env.PERPLEXITY_API_KEY;
+  if (!apiKey) {
+    throw new Error('PERPLEXITY_API_KEY is missing');
+  }
+
+  const messages = [
+    {
+      role: 'system',
+      content: systemPrompt || 'Ты — ассистент разработчика. Отвечай кратко и по делу.',
+    },
+    {
+      role: 'user',
+      content:
+        `Пользователь задал вопрос: "${userQuestion}". ` +
+        `Вот данные о намерении и результатах инструментов (JSON):\n\n${summaryJson}\n\n` +
+        `Сформируй полезный, краткий ответ на русском.`,
+    },
+  ];
+
+  const response = await fetch('https://api.perplexity.ai/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'sonar',
+      messages,
+      temperature: 0.7,
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error?.message || `Perplexity HTTP ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content || '';
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -358,7 +398,12 @@ function recommendNextTask(tasks, gitStatus) {
 // ═══════════════════════════════════════════════════════════════════
 // 🚀 MAIN PROCESSING
 // ═══════════════════════════════════════════════════════════════════
-export async function processTeamQuery(query, userId = 'team_user') {
+export async function processTeamQuery(
+  query,
+  userId = 'team_user',
+  llmMode = 'ollama',
+  personalizationEnabled = false
+) {
   try {
     console.log('[Team Assistant] 📥 Query:', query);
 
@@ -369,270 +414,196 @@ export async function processTeamQuery(query, userId = 'team_user') {
 
     switch (intent.action) {
       // ────────────────────────────────────────────────────────────
-case 'list_tasks': {
-  const tasksResult = await callTaskTool('list_tasks', {});
-  
-  // ✅ Безопасный парсинг
-  let tasks = [];
-  try {
-    const parsed = parseMcpResponse(tasksResult, 'Task MCP');
-    tasks = Array.isArray(parsed) ? parsed : (parsed.tasks || []);
-  } catch (e) {
-    console.error('[list_tasks] Parse error:', e.message);
-    tasks = [];
-  }
-
-  // Apply filters
-  if (intent.params.priority) {
-    tasks = tasks.filter(t => t.priority === intent.params.priority);
-  }
-  if (intent.params.status) {
-    tasks = tasks.filter(t => t.status === intent.params.status);
-  }
-
-  result.tasks = tasks;
-  result.answer = `Найдено **${tasks.length}** ${tasks.length === 1 ? 'задача' : 'задач'}${intent.params.priority ? ` с приоритетом **${intent.params.priority}**` : ''}${intent.params.status ? ` со статусом **${intent.params.status}**` : ''}.`;
-  break;
-}
-
+      // СПИСОК ЗАДАЧ
       // ────────────────────────────────────────────────────────────
-case 'recommend_next': {
-  const tasksResult = await callTaskTool('list_tasks', {});
-  
-  // ✅ Улучшенный парсинг
-  let tasks = [];
-  try {
-    const parsed = parseMcpResponse(tasksResult, 'Task MCP');
-    tasks = Array.isArray(parsed) ? parsed : (parsed.tasks || []);
-  } catch (e) {
-    console.error('[recommend_next] Parse error:', e.message);
-  }
-  
-  console.log(`[recommend_next] Found ${tasks.length} tasks`); // 🔍 Debug
-  
-  const gitStatusResult = await callGitTool('get_git_status', {});
-  const gitStatus = parseMcpResponse(gitStatusResult, 'Git MCP');
+      case 'list_tasks': {
+        const tasksResult = await callTaskTool('list_tasks', {});
+        let tasks = [];
 
-  const recommendation = recommendNextTask(tasks, gitStatus);
+        try {
+          const parsed = parseMcpResponse(tasksResult, 'Task MCP');
+          tasks = Array.isArray(parsed) ? parsed : (parsed.tasks || []);
+        } catch (e) {
+          console.error('[list_tasks] Parse error:', e.message);
+          tasks = [];
+        }
 
-  result.tasks = recommendation.all_scored.slice(0, 5);
-  result.recommendation = recommendation.recommended_task
-    ? `**Начни с:** ${recommendation.recommended_task.title}\n\n**Причина:** ${recommendation.reason}`
-    : 'Нет активных задач';
-  result.git_context = {
-    modified_files: gitStatus.modified?.length || 0,
-    staged_files: gitStatus.staged?.length || 0,
-    branch: gitStatus.branch || 'unknown',
-  };
-  result.answer = result.recommendation;
-  result.next_actions = recommendation.recommended_task
-    ? [
-        gitStatus.modified?.length > 0 ? '📝 Закоммитить изменения' : null,
-        `🚀 Начать работу над задачей #${recommendation.recommended_task.id}`,
-      ].filter(Boolean)
-    : [];
-  break;
-}
+        if (intent.params.priority) {
+          tasks = tasks.filter(t => t.priority === intent.params.priority);
+        }
+        if (intent.params.status) {
+          tasks = tasks.filter(t => t.status === intent.params.status);
+        }
 
-      // ────────────────────────────────────────────────────────────
-case 'project_status': {
-  const tasksResult = await callTaskTool('list_tasks', {});
-  
-  // ✅ Улучшенный парсинг
-  let tasks = [];
-  try {
-    const parsed = parseMcpResponse(tasksResult, 'Task MCP');
-    tasks = Array.isArray(parsed) ? parsed : (parsed.tasks || []);
-  } catch (e) {
-    console.error('[project_status] Parse error:', e.message);
-  }
-  
-  console.log(`[project_status] Found ${tasks.length} tasks`); // 🔍 Debug
-
-  const gitStatusResult = await callGitTool('get_git_status', {});
-  const gitStatus = parseMcpResponse(gitStatusResult, 'Git MCP');
-
-  const taskStats = {
-    total: tasks.length,
-    done: tasks.filter(t => t.status === 'done').length,
-    in_progress: tasks.filter(t => t.status === 'in_progress').length,
-    todo: tasks.filter(t => t.status === 'todo').length,
-    high_priority: tasks.filter(t => t.priority === 'high' && t.status !== 'done').length,
-  };
-
-  result.task_stats = taskStats;
-  result.git_context = {
-    branch: gitStatus.branch || 'unknown',
-    modified_files: gitStatus.modified?.length || 0,
-    staged_files: gitStatus.staged?.length || 0,
-  };
-  result.answer = `## 📊 Статус проекта
-
-**Задачи:** ${taskStats.done}/${taskStats.total} выполнено, ${taskStats.in_progress} в работе, ${taskStats.high_priority} high-приоритетных
-
-**Git:** ветка \`${gitStatus.branch}\`, ${gitStatus.modified?.length || 0} измененных файлов, ${gitStatus.staged?.length || 0} подготовленных`;
-  break;
-}
-
-      // ────────────────────────────────────────────────────────────
-
-case 'create_task': {
-  const params = {
-    title: intent.params.title || 'Новая задача',
-    priority: intent.params.priority || 'medium',
-    status: intent.params.status || 'todo',
-  };
-
-  console.log('[create_task] Creating:', params);
-
-  const taskResult = await callTaskTool('create_task', params);
-  
-  // ✅ Безопасный парсинг
-  let newTask = {};
-  try {
-    const parsed = parseMcpResponse(taskResult, 'Task MCP');
-    newTask = parsed.task || parsed;
-  } catch (e) {
-    console.error('[create_task] Parse error:', e.message);
-    newTask = { title: params.title, priority: params.priority };
-  }
-
-  result.task = newTask;
-  result.answer = `✅ Создана задача: **${newTask.title}** (приоритет: **${newTask.priority}**${newTask.id ? `, ID: #${newTask.id}` : ''})`;
-  break;
-}
-
-
-      // ────────────────────────────────────────────────────────────
-      case 'update_task': {
-        const taskResult = await callTaskTool('updateTask', {
-          id: intent.params.id,
-          ...intent.params.updates,
-        });
-        const updated = parseMcpResponse(taskResult, 'Task MCP');
-
-        result.task = updated;
-        result.answer = `✅ Задача #${updated.id} обновлена`;
+        result.tasks = tasks;
+        result.answer = `Найдено **${tasks.length}** ${tasks.length === 1 ? 'задача' : 'задач'}${
+          intent.params.priority ? ` с приоритетом **${intent.params.priority}**` : ''
+        }${intent.params.status ? ` со статусом **${intent.params.status}**` : ''}.`;
         break;
       }
 
       // ────────────────────────────────────────────────────────────
-      case 'delete_task': {
-        await callTaskTool('deleteTask', { id: intent.params.id });
-        result.answer = `🗑️ Задача #${intent.params.id} удалена`;
-        break;
-      }
-
+      // РЕКОМЕНДАЦИЯ СЛЕДУЮЩЕЙ ЗАДАЧИ
       // ────────────────────────────────────────────────────────────
-      case 'knowledge_query': {
-        // ✅ ИСПРАВЛЕНО: правильная передача вопроса
-        const question = intent.params.question || intent.params.query || query;
-        
-        console.log('[Team Assistant] 📚 RAG query:', question);
-        
-        const ragResult = await answerWithRagViaMcp(question, {
-          indexName: 'docs_index',
-        });
+      case 'recommend_next': {
+        const tasksResult = await callTaskTool('list_tasks', {});
+        let tasks = [];
 
-        result.answer = ragResult.llmAnswer || 'Не удалось найти информацию в документации';
-        result.sources = ragResult.retrievedChunks?.map(chunk => ({
-          document: chunk.source,
-          preview: chunk.text?.substring(0, 150) + '...',
-          relevance: chunk.similarity ? Math.round(chunk.similarity * 100) : null,
-        }));
-        break;
-      }
+        try {
+          const parsed = parseMcpResponse(tasksResult, 'Task MCP');
+          tasks = Array.isArray(parsed) ? parsed : (parsed.tasks || []);
+        } catch (e) {
+          console.error('[recommend_next] Parse error:', e.message);
+        }
 
-      // ────────────────────────────────────────────────────────────
-      case 'git_status': {
+        console.log(`[recommend_next] Found ${tasks.length} tasks`);
+
         const gitStatusResult = await callGitTool('get_git_status', {});
         const gitStatus = parseMcpResponse(gitStatusResult, 'Git MCP');
 
-        result.git_context = gitStatus;
-        result.answer = `## 🔀 Git Status
+        const recommendation = recommendNextTask(tasks, gitStatus);
 
-**Ветка:** \`${gitStatus.branch}\`  
-**Измененных файлов:** ${gitStatus.modified?.length || 0}  
-**Подготовленных файлов:** ${gitStatus.staged?.length || 0}
+        result.tasks = recommendation.all_scored.slice(0, 5);
+        result.recommendation = recommendation.recommended_task
+          ? `**Начни с:** ${recommendation.recommended_task.title}\n\n**Причина:** ${recommendation.reason}`
+          : 'Нет активных задач';
 
-${gitStatus.modified?.length > 0 ? `\n**Измененные:**\n${gitStatus.modified.map(f => `- ${f}`).join('\n')}` : ''}`;
+        result.git_context = {
+          modified_files: gitStatus.modified?.length || 0,
+          staged_files: gitStatus.staged?.length || 0,
+          branch: gitStatus.branch || 'unknown',
+        };
+
+        result.answer = result.recommendation;
+        result.next_actions = recommendation.recommended_task
+          ? [
+              gitStatus.modified?.length > 0 ? '📝 Закоммитить изменения' : null,
+              `🚀 Начать работу над задачей #${recommendation.recommended_task.id}`,
+            ].filter(Boolean)
+          : [];
         break;
       }
 
       // ────────────────────────────────────────────────────────────
-case 'git_commits': {
-  const count = intent.params.count || 5;
-  
-  try {
-    const commitsResult = await callGitTool('get_recent_commits', { count });
-    const commits = parseMcpResponse(commitsResult, 'Git MCP');
+      // СТАТУС ПРОЕКТА
+      // ────────────────────────────────────────────────────────────
+      case 'project_status': {
+        const tasksResult = await callTaskTool('list_tasks', {});
+        let tasks = [];
 
-    result.commits = Array.isArray(commits) ? commits : [];
-    
-    if (result.commits.length === 0) {
-      result.answer = `📝 Коммитов не найдено (возможно, пустой репозиторий)`;
-    } else {
-      result.answer = `## 📝 Последние ${result.commits.length} коммитов:\n\n${result.commits
-        .map(c => `- \`${c.hash.substring(0, 7)}\` ${c.message} *(${c.author})*`)
-        .join('\n')}`;
-    }
-  } catch (e) {
-    console.error('[git_commits] Error:', e.message);
-    result.answer = `⚠️ Ошибка получения коммитов: ${e.message}`;
-  }
-  break;
-}
-// ────────────────────────────────────────────────────────────
+        try {
+          const parsed = parseMcpResponse(tasksResult, 'Task MCP');
+          tasks = Array.isArray(parsed) ? parsed : (parsed.tasks || []);
+        } catch (e) {
+          console.error('[project_status] Parse error:', e.message);
+        }
 
-case 'local_llm_query': {
-  try {
-    const question = intent.params.question || query;
-    console.log('[Team Assistant] 🤖 Local LLM query:', question);
-    
-    const startTime = Date.now();
-    const llmAnswer = await localLlmClient.chat(question, {
-      temperature: 0.7,
-      top_p: 0.9
-    });
-    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-    
-    result.answer = llmAnswer || 'Локальная LLM не ответила';
-    result.source = 'local_llm';
-    result.model = localLlmClient.model;
-    result.performance = {
-      duration: `${duration}s`,
-      provider: 'Ollama (локально)'
-    };
-    
-    console.log(`[Team Assistant] ✅ Local LLM response received in ${duration}s`);
-  } catch (e) {
-    console.error('[local_llm_query] Error:', e.message);
-    result.answer = `⚠️ Ошибка локальной LLM: ${e.message}`;
-  }
+        console.log(`[project_status] Found ${tasks.length} tasks`);
+
+        const gitStatusResult = await callGitTool('get_git_status', {});
+        const gitStatus = parseMcpResponse(gitStatusResult, 'Git MCP');
+
+        result.tasks = tasks;
+        result.git_context = gitStatus;
+        result.answer = `В проекте ${tasks.length} задач, ветка: ${gitStatus.branch || 'unknown'}.`;
+        break;
+      }
+
+      // ────────────────────────────────────────────────────────────
+      // ЛОКАЛЬНАЯ LLM
+      // ────────────────────────────────────────────────────────────
+      // case 'local_llm_query': {
+      //   const question = intent.params.question || query;
+
+      //   let baseSystemPrompt =
+      //     'Ты — ассистент разработчика, помогаешь с технической помощью, анализом кода и архитектурой.';
+
+      //   let finalSystemPrompt = baseSystemPrompt;
+      //   let profileMetadata = null;
+
+      //   if (personalizationEnabled && userId) {
+      //     const systemPromptFromProfile = userPersonalizationService.getSystemPromptForQuery(userId, query);
+      //     profileMetadata = userPersonalizationService.getProfileMetadata(userId);
+
+      //     if (systemPromptFromProfile) {
+      //       finalSystemPrompt = `${baseSystemPrompt}\n\n${systemPromptFromProfile}`;
+      //     }
+      //   }
+
+      //   const llmAnswer = await localLlmClient.chat(question, {
+      //     system: finalSystemPrompt,
+      //     temperature: 0.7,
+      //     top_p: 0.9,
+      //   });
+
+      //   result.answer = llmAnswer;
+      //   result.personalized = Boolean(personalizationEnabled && profileMetadata);
+      //   result.personalizationProfile = profileMetadata?.name || null;
+      //   result.llmUsed = llmMode;
+      //   return result;
+      // }
+      case 'local_llm_query': {
+  const question = intent.params.question || query;
+  result.answer = `Локальная LLM сейчас отключена. Вопрос: ${question}`;
   break;
 }
 
       // ────────────────────────────────────────────────────────────
-      default:
-        result.answer = `❓ Не удалось распознать команду. 
+      // RAG / KNOWLEDGE
+      // ────────────────────────────────────────────────────────────
+      case 'knowledge_query': {
+        const ragResult = await answerWithRagViaMcp(intent.params.question || query, {
+          indexName: 'docs_index',
+          topK: 5,
+        });
+        result.rag = ragResult;
+        result.answer = ragResult.answer || ragResult.combinedAnswer || 'Ответ найден в документации.';
+        break;
+      }
 
-**Попробуй:**
-- "Покажи все задачи"
-- "Что делать первым?"
-- "Статус проекта"
-- "Создай задачу: исправить баг, приоритет high"
-- "Как работает RAG в этом проекте?"
-- "Покажи задачи с приоритетом high"`;
+      default: {
+        result.answer = 'Я пока не знаю, как обработать этот запрос. Попробуй переформулировать.';
+        break;
+      }
     }
 
-    console.log('[Team Assistant] ✅ Success');
+     // 🎯 ПЕРСОНАЛИЗАЦИЯ + ВЫЗОВ PERPLEXITY ДЛЯ ФИНАЛЬНОГО ТЕКСТА
+    let baseSystemPrompt =
+      'Ты — ассистент разработчика, помогаешь с технической помощью, анализом кода и архитектурой.';
+
+    let finalSystemPrompt = baseSystemPrompt;
+    let profileMetadata = null;
+
+    if (personalizationEnabled && userId) {
+      const systemPromptFromProfile = userPersonalizationService.getSystemPromptForQuery(userId, query);
+      profileMetadata = userPersonalizationService.getProfileMetadata(userId);
+
+      if (systemPromptFromProfile) {
+        finalSystemPrompt = `${baseSystemPrompt}\n\n${systemPromptFromProfile}`;
+      }
+    }
+
+    const summaryJson = JSON.stringify(result, null, 2);
+    const llmAnswer = await callPerplexityWithSystemPrompt(
+      finalSystemPrompt,
+      query,
+      summaryJson
+    );
+
+    result.answer = llmAnswer || result.answer;
+    result.personalized = Boolean(personalizationEnabled && profileMetadata);
+    result.personalizationProfile = profileMetadata?.name || null;
+    result.llmUsed = llmMode; // покажет "perplexity" в UI, если ты его передал
+
+    console.log('[Team Assistant] ✅ Success (Perplexity with personalization)');
     return result;
   } catch (error) {
     console.error('[Team Assistant] ❌ Error:', error);
     return {
       success: false,
-      error: error.message,
-      answer: `⚠️ Произошла ошибка: ${error.message}`,
+      error: error.message || 'Unknown error in Team Assistant',
+      answer: 'Произошла ошибка при обработке запроса команды.',
+      llmUsed: llmMode,
     };
   }
 }
