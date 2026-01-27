@@ -1,38 +1,7 @@
 # docker-compose.yml
-
-version: '3.8'
+# Убрана версия (устаревшая), исправлены порты и volumes
 
 services:
-  # ========================================
-  # FRONTEND (React)
-  # ========================================
-  frontend:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: frontend
-    container_name: perplexity-chat-frontend
-    working_dir: /app/client
-    ports:
-      - "5173:5173"
-    environment:
-      - REACT_APP_API_URL=http://backend:5000
-      - REACT_APP_NODE_ENV=development
-    depends_on:
-      - backend
-    networks:
-      - perplexity-network
-    volumes:
-      - ./client:/app/client
-      - /app/client/node_modules
-    command: npm run dev -- --host 0.0.0.0 --port 5173
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5173"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-
   # ========================================
   # BACKEND (Node.js)
   # ========================================
@@ -47,26 +16,56 @@ services:
     environment:
       - NODE_ENV=development
       - PORT=5000
-      - CORS_ORIGIN=http://localhost:3000
+      - CORS_ORIGIN=http://localhost:5173
       - OLLAMA_BASE_URL=http://ollama:11434
       - PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY:-}
       - PERSONALIZATION_ENABLED=true
-    # depends_on:
-      # ollama:
-        # condition: service_healthy
     networks:
       - perplexity-network
     volumes:
+      # Development: монтируем код для hot-reload
       - ./server:/app/server
       - ./server/userProfiles:/app/server/userProfiles
+      # Исключаем node_modules (используем из контейнера)
       - /app/server/node_modules
     command: npm start
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 20s
+
+  # ========================================
+  # FRONTEND (React + Vite)
+  # ========================================
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: frontend
+    container_name: perplexity-chat-frontend
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:5000
+      - NODE_ENV=development
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - perplexity-network
+    volumes:
+      # Development: монтируем код для hot-reload
+      - ./client:/app/client
+      - /app/client/node_modules
+    command: npm run dev -- --host 0.0.0.0 --port 5173
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5173"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   # ========================================
   # OLLAMA (Local LLM Server)
@@ -84,7 +83,7 @@ services:
       - ollama-data:/root/.ollama
     command: serve
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:11434/api/tags"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -1,7 +1,11 @@
+Ниже полный structure.md с добавленными описаниями персонализации Team Assistant и нового поведения через Perplexity, без удаления предыдущего содержимого.
+​
+
+text
 # MCP Server & Chat Integration Project with RAG + Git + Support + Team Assistant + Local LLM + Analytics
 
 ## Общее описание
-Полнофункциональное приложение для интеграции MCP (Model Context Protocol) серверов с React-чат интерфейсом, **RAG (Retrieval-Augmented Generation)** системой, **Support Assistant**, **Team Assistant**, **локальной LLM (Ollama)** и **Analytics Assistant** для анализа логов и продуктовой воронки. Архитектура включает микросервисы для управления задачами, документами, GitHub API, Docker, Git-операциями, Document Indexing Pipeline, поддержки пользователей, интеллектуального управления командой, локальной обработки запросов и аналитики.
+Полнофункциональное приложение для интеграции MCP (Model Context Protocol) серверов с React-чат интерфейсом, **RAG (Retrieval-Augmented Generation)** системой, **Support Assistant**, **Team Assistant**, **локальной LLM (Ollama)** и **Analytics Assistant** для анализа логов и продуктовой воронки. Архитектура включает микросервисы для управления задачами, документами, GitHub API, Docker, Git-операциями, Document Indexing Pipeline, поддержки пользователей, интеллектуального управления командой, локальной обработки запросов и аналитики. [file:86]
 
 ## Deployment Architecture
 
@@ -72,42 +76,45 @@ jobs:
           description: |
             ✅ Frontend: ${{ secrets.VERCEL_URL }}
             ✅ Backend: ${{ secrets.RAILWAY_URL }}
-```
-
-## GitHub Secrets Configuration
-
+GitHub Secrets Configuration
 Required Secrets (Settings → Secrets and variables → Actions):
 
-| Secret Name | Description | Source |
-|-------------|-------------|--------|
-| VERCEL_TOKEN | Vercel Access Token | vercel.com → Account Settings → Tokens |
-| VERCEL_ORG_ID | Vercel Organization ID | vercel.com/account → Settings → General → Your ID |
-| VERCEL_PROJECT_ID | Vercel Project ID | vercel.com/dashboard → Project → Settings → Project ID |
-| RAILWAY_TOKEN | Railway API Token | railway.app → Account Settings → Tokens |
-| PERPLEXITY_API_KEY | Perplexity AI API Key | perplexity.ai/settings/api |
-| DOCKER_USERNAME | Docker Hub Username | hub.docker.com → Account |
-| DOCKER_PASSWORD | Docker Hub Access Token | hub.docker.com → Account Settings → Security |
-| DISCORD_WEBHOOK | Discord Webhook URL | Discord → Channel Settings → Integrations → Webhooks |
-| VERCEL_URL | Frontend Production URL | После первого деплоя |
-| RAILWAY_URL | Backend Production URL | После первого деплоя |
+Secret Name	Description	Source
+VERCEL_TOKEN	Vercel Access Token	vercel.com → Account Settings → Tokens
+VERCEL_ORG_ID	Vercel Organization ID	vercel.com/account → Settings → General → Your ID
+VERCEL_PROJECT_ID	Vercel Project ID	vercel.com/dashboard → Project → Settings → Project ID
+RAILWAY_TOKEN	Railway API Token	railway.app → Account Settings → Tokens
+PERPLEXITY_API_KEY	Perplexity AI API Key	perplexity.ai/settings/api
+DOCKER_USERNAME	Docker Hub Username	hub.docker.com → Account
+DOCKER_PASSWORD	Docker Hub Access Token	hub.docker.com → Account Settings → Security
+DISCORD_WEBHOOK	Discord Webhook URL	Discord → Channel Settings → Integrations → Webhooks
+VERCEL_URL	Frontend Production URL	После первого деплоя
+RAILWAY_URL	Backend Production URL	После первого деплоя
+Стек технологий
+Язык backend: JavaScript (Node.js ESM)
 
-## Стек технологий
+Язык frontend: JavaScript (React 18)
 
-- **Язык backend**: JavaScript (Node.js ESM)
-- **Язык frontend**: JavaScript (React 18)
-- **Фреймворки**: Express.js, React, Vite
-- **AI/LLM**:
-  - Perplexity API (sonar model) - облачная
-  - Ollama (gemma3:4b, llama3.2:3b) - локальная
-- **MCP SDK**: @modelcontextprotocol/sdk
-- **Библиотеки**: Axios, node-fetch, node-cron, dockerode
-- **Инструменты**: Docker, Docker Compose, Git
-- **Deployment**: Vercel (Frontend), Railway (Backend)
-- **CI/CD**: GitHub Actions
+Фреймворки: Express.js, React, Vite
 
-## Структура директорий
+AI/LLM:
 
-```
+Perplexity API (sonar model) - облачная
+
+Ollama (gemma3:4b, llama3.2:3b) - локальная
+
+MCP SDK: @modelcontextprotocol/sdk
+
+Библиотеки: Axios, node-fetch, node-cron, dockerode
+
+Инструменты: Docker, Docker Compose, Git
+
+Deployment: Vercel (Frontend), Railway (Backend)
+
+CI/CD: GitHub Actions
+
+Структура директорий
+text
 AI_Challenge_23/
 ├── .github/                           # 🆕 GitHub Actions CI/CD
 │   └── workflows/
@@ -116,29 +123,30 @@ AI_Challenge_23/
 ├── server/                            # Backend (Node.js) - Railway
 │   ├── index.js                       # Express сервер (PORT=4000)
 │   │
-│   ├── envBootstrap.js               # 🆕 Bootstrap env (file.env → process.env)
-│   ├── check-env.js                  # 🆕 Утилита проверки переменных окружения
+│   ├── envBootstrap.js                # 🆕 Bootstrap env (file.env → process.env)
+│   ├── check-env.js                   # 🆕 Утилита проверки переменных окружения
 │   │
 │   ├── MCP Clients & Services
 │   │   ├── mcpClient.js
 │   │   ├── ragMcpClient.js
 │   │   ├── gitMcpClient.js
 │   │   ├── supportMcpClient.js
-│   │   ├── localLlmClient.js         # 🆕 Клиент для Ollama
+│   │   ├── localLlmClient.js         # Клиент для Ollama (локальная LLM)
 │   │
 │   ├── Service Layer
 │   │   ├── ragService.js
 │   │   ├── assistantService.js
 │   │   ├── supportAssistantService.js
-│   │   ├── teamAssistantService.js   # 🔄 Обновлён (+ Local LLM)
+│   │   ├── teamAssistantService.js   # 🔄 Обновлён: Perplexity + персонализация профилей
+│   │   ├── userPersonalizationService.js  # 🆕 Профили пользователей (Сергей, и др.)
 │   │   ├── documentIndexer.js
-│   │   ├── analyticsService.js       # 🆕 Аналитика логов/воронки
-│   │   ├── analyticsChatService.js   # 🆕 LLM-обёртка над analyticsService
+│   │   ├── analyticsService.js       # Аналитика логов/воронки
+│   │   ├── analyticsChatService.js   # LLM-обёртка над analyticsService
 │   │
 │   ├── Configuration
-│   │   ├── analyticsConfig.js        # 🆕 Пути источников (ANALYTICS_CSV/LOG/JSON)
+│   │   ├── analyticsConfig.js        # Пути источников (ANALYTICS_CSV/LOG/JSON)
 │   │   ├── ollamaConfig.js           # Конфиг моделей и пресетов
-│   │   ├── promptTemplates.js        # Шаблоны промптов
+│   │   ├── promptTemplates.js        # Шаблоны промптов (включая персонализированные)
 │   │
 │   ├── MCP Servers
 │   │   ├── documents-mcp.js
@@ -151,20 +159,22 @@ AI_Challenge_23/
 │   │   ├── githubTools.js
 │   │   ├── githubService.js
 │   │   ├── prReviewService.js
-│   │   ├── health-check.js           # 🆕 /api/health для CI/CD и Railway
+│   │   ├── health-check.js           # /api/health для CI/CD и Railway
 │   │   ├── mcpSerialize.js
 │   │
 │   ├── Data Storage
 │   │   ├── documents/                # Markdown документы
 │   │   ├── indexes/                  # JSON индексы (343 embeddings)
-│   │   ├── data/                     # 🆕 Тестовые данные аналитики
+│   │   ├── data/                     # Тестовые данные аналитики
 │   │   │   ├── events.csv            # События (timestamp, level, route, status_code)
 │   │   │   ├── errors.log            # Логи ошибок (ERROR [route=...])
 │   │   │   └── funnel.json           # Воронка: [{ step, users }, ...]
 │   │   ├── tasks.json
+│   │   ├── userProfiles/             # 🆕 JSON‑профили для персонализации Team Assistant
+│   │   │   └── luno-o.json           # Профиль Сергея (язык, стек, стиль ответов)
 │   │
 │   ├── Configuration
-│   │   ├── file.env                  # 🔄 Локальные переменные (OLLAMA_URL, OLLAMA_MODEL, ANALYTICS_*)
+│   │   ├── file.env                  # Локальные переменные (OLLAMA_URL, OLLAMA_MODEL, ANALYTICS_*)
 │   │   ├── file.env.production       # Production-конфиг (Railway)
 │   │   ├── docker-compose.yml
 │   │   ├── Dockerfile
@@ -181,41 +191,37 @@ AI_Challenge_23/
 │   │   │   ├── ChatPage.jsx
 │   │   │   ├── AssistantPage.jsx
 │   │   │   ├── SupportPage.jsx
-│   │   │   ├── TeamAssistantPage.jsx       # 🔄 Обновлён (+ LLM Switcher)
-│   │   │   ├── LlmOptimizationPage.jsx     # 🆕 Тестирование локальной LLM
-│   │   │   ├── AnalyticsPage.jsx          # 🆕 UI для Analytics Assistant
+│   │   │   ├── TeamAssistantPage.jsx       # 🔄 Обновлён: LLM Switcher + флаг персонализации
+│   │   │   ├── LlmOptimizationPage.jsx     # Тестирование локальной LLM
+│   │   │   ├── AnalyticsPage.jsx          # UI для Analytics Assistant
 │   │   ├── components/
 │   │   │   ├── ChatMessageList.jsx
 │   │   │   ├── ChatInput.jsx
-│   │   │   ├── AnalyticsQueryForm.jsx     # 🆕 Форма для запросов в аналитику
-│   │   │   ├── AnalyticsResultView.jsx    # 🆕 Отображение ответа и агрегатов
+│   │   │   ├── AnalyticsQueryForm.jsx     # Форма для запросов в аналитику
+│   │   │   ├── AnalyticsResultView.jsx    # Отображение ответа и агрегатов
 │   │   ├── hooks/
-│   │   │   └── useTeamAssistant.js
+│   │   │   └── useTeamAssistant.js        # Логика вызова /api/team/ask с personalizationEnabled
 │   │   └── styles/
-│   │       ├── TeamAssistantPage.css      # 🔄 + LLM Switcher styles
-│   │       ├── LlmOptimizationPage.css    # 🆕 Стили для LLM оптимизации
-│   │       └── AnalyticsPage.css          # 🆕 Стили для аналитики
+│   │       ├── TeamAssistantPage.css      # 🔄 Стили для LLM Switcher и бейджей персонализации
+│   │       ├── LlmOptimizationPage.css    # Стили для LLM оптимизации
+│   │       └── AnalyticsPage.css          # Стили для аналитики
 │   │
-│   ├── .env                           # 🆕 Vercel Environment Variables
-│   ├── vercel.json                    # 🆕 Vercel config
+│   ├── .env                           # Vercel Environment Variables
+│   ├── vercel.json                    # Vercel config
 │   └── package.json
 │
 ├── scripts/                           # Скрипты для тестов и отладки
 │   ├── test-docker-chain.sh          # Проверка Docker-цепочки (build, run, MCP)
 │   ├── test-rag-compare.sh           # Запуск RAG сравнения (with/without RAG, rerank)
 │   ├── test-search.js                # Тестовый поиск по документам через MCP
-│   └── health-check-local.sh         # 🆕 Локальный health check
+│   └── health-check-local.sh         # Локальный health check
 │
-└── structure.md                       # Этот файл (v1.4.0+)
-```
+└── structure.md                       # Этот файл (v1.5.0+)
+Deployment Configuration
+Railway (Backend)
+Файл: server/railway.json
 
-## Deployment Configuration
-
-### Railway (Backend)
-
-Файл: `server/railway.json`
-
-```json
+json
 {
   "builder": "NIXPACKS",
   "deploy": {
@@ -224,25 +230,20 @@ AI_Challenge_23/
     "restartPolicyType": "ON_FAILURE"
   }
 }
-```
-
 Environment Variables (Railway Dashboard):
 
-```bash
+bash
 PERPLEXITY_API_KEY=pplx-xxxxxxxxxxxx
 PERPLEXITY_MODEL=sonar
 REPO_PATH=/app/repo
 PORT=4000  # Auto-injected by Railway
 NODE_ENV=production
-```
+Root Directory: /server (Settings → Source → Root Directory)
 
-Root Directory: `/server` (Settings → Source → Root Directory)
+Vercel (Frontend)
+Файл: client/vercel.json
 
-### Vercel (Frontend)
-
-Файл: `client/vercel.json`
-
-```json
+json
 {
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
@@ -252,20 +253,15 @@ Root Directory: `/server` (Settings → Source → Root Directory)
     { "src": "/[^.]+", "dest": "/", "status": 200 }
   ]
 }
-```
-
 Environment Variables (Vercel Dashboard):
 
-```bash
+bash
 VITE_API_URL=https://your-backend.railway.app
 NODE_VERSION=20
-```
-
-### Ollama (Local LLM)
-
+Ollama (Local LLM)
 Установка (Windows):
 
-```bash
+bash
 # 1. Скачать с ollama.com
 # 2. Установить и запустить автоматически на localhost:11434
 
@@ -277,20 +273,14 @@ ollama pull nomic-embed-text
 # 4. Проверить
 ollama list
 curl http://localhost:11434
-```
-
 Environment Variables (Local Development):
 
-```bash
+bash
 OLLAMA_URL=http://localhost:11434
 OLLAMA_MODEL=gemma3:4b
-```
-
-## Development vs Production
-
-### Local Development
-
-```bash
+Development vs Production
+Local Development
+bash
 # Terminal 1 - Ollama (если не запущена автоматически)
 ollama serve
 
@@ -303,11 +293,8 @@ npm run dev  # http://localhost:4000
 cd client
 npm install
 npm run dev  # http://localhost:5173
-```
-
-### Production (GitHub Actions)
-
-```bash
+Production (GitHub Actions)
+bash
 git add .
 git commit -m "feat: deploy update"
 git push origin main
@@ -317,72 +304,43 @@ git push origin main
 # 2. Frontend → Vercel (serverless)
 # 3. Backend → Railway (container)
 # 4. Discord notification с результатом
-```
+API Endpoints (Production)
+Base URL: https://your-backend.railway.app
 
-## API Endpoints (Production)
-
-Base URL: `https://your-backend.railway.app`
-
-### ✅ Team Assistant API
-
-| Endpoint | Method | Body | Description |
-|----------|--------|------|-------------|
-| `/api/team/ask` | POST | `{query, user_id}` | Natural Language запросы (Perplexity + Ollama) |
-
-### 🤖 Local LLM API (NEW)
-
-| Endpoint | Method | Body | Description |
-|----------|--------|------|-------------|
-| `/api/local-llm/ask` | POST | `{prompt, temperature, top_p}` | Прямой запрос к Ollama |
-| `/api/local-llm/health` | GET | `-` | Проверка доступности Ollama |
-| `/api/local-llm/models` | GET | `-` | Список установленных моделей |
-
-### 📊 Analytics API (NEW)
-
-| Endpoint | Method | Body | Description |
-|----------|--------|------|-------------|
-| `/api/analytics/query` | POST | `{query}` | Прямой запрос к аналитике |
-| `/api/analytics/chat` | POST | `{query}` | LLM-обёртка (ответ + агрегаты) |
-
-### 📚 Documents Pipeline
-
-| Endpoint | Method | Body | Description |
-|----------|--------|------|-------------|
-| `/api/documents/index` | POST | `{directory, index_name}` | Создать индекс |
-| `/api/documents/search` | POST | `{query, index_name, top_k}` | Поиск |
-
-### 🤖 RAG API
-
-| Endpoint | Method | Body | Description |
-|----------|--------|------|-------------|
-| `/api/rag/ask` | POST | `{question, mode, topK}` | RAG запрос |
-
-### 💬 Support Assistant
-
-| Endpoint | Method | Body | Description |
-|----------|--------|------|-------------|
-| `/api/support/ask` | POST | `{user_id, question}` | Поддержка |
-
-### ✅ Git Assistant API
-
-| Endpoint | Method | Body | Description |
-|----------|--------|------|-------------|
-| `/api/assistant/command` | POST | `{command}` | Git команды |
-
-### 🧪 LLM Optimization API (NEW)
-
-| Endpoint | Method | Body | Description |
-|----------|--------|------|-------------|
-| `/api/llm/models` | GET | `-` | Список моделей, пресетов, промптов |
-| `/api/llm/optimized` | POST | `{prompt, temperature, ...}` | Запрос с кастомными параметрами |
-| `/api/llm/test-config` | POST | `{prompt, configs[]}` | Сравнение конфигураций |
-| `/api/llm/template` | POST | `{template_name, data, preset}` | Использование шаблона промпта |
-
-## Environment Variables
-
-### Development (.env.example)
-
-```bash
+✅ Team Assistant API
+Endpoint	Method	Body	Description
+/api/team/ask	POST	{query, user_id, llmMode, personalizationEnabled}	Natural Language запросы (Perplexity + персонализация профиля)
+🤖 Local LLM API
+Endpoint	Method	Body	Description
+/api/local-llm/ask	POST	{prompt, temperature, top_p}	Прямой запрос к Ollama
+/api/local-llm/health	GET	-	Проверка доступности Ollama
+/api/local-llm/models	GET	-	Список установленных моделей
+📊 Analytics API
+Endpoint	Method	Body	Description
+/api/analytics/query	POST	{query}	Прямой запрос к аналитике
+/api/analytics/chat	POST	{query}	LLM-обёртка (ответ + агрегаты)
+📚 Documents Pipeline
+Endpoint	Method	Body	Description
+/api/documents/index	POST	{directory, index_name}	Создать индекс
+/api/documents/search	POST	{query, index_name, top_k}	Поиск
+🤖 RAG API
+Endpoint	Method	Body	Description
+/api/rag/ask	POST	{question, mode, topK}	RAG запрос
+💬 Support Assistant
+Endpoint	Method	Body	Description
+/api/support/ask	POST	{user_id, question}	Поддержка
+✅ Git Assistant API
+Endpoint	Method	Body	Description
+/api/assistant/command	POST	{command}	Git команды
+🧪 LLM Optimization API
+Endpoint	Method	Body	Description
+/api/llm/models	GET	-	Список моделей, пресетов, промптов
+/api/llm/optimized	POST	{prompt, temperature, ...}	Запрос с кастомными параметрами
+/api/llm/test-config	POST	{prompt, configs[]}	Сравнение конфигураций
+/api/llm/template	POST	{template_name, data, preset}	Использование шаблона промпта
+Environment Variables
+Development (.env.example)
+bash
 # Perplexity AI
 PERPLEXITY_API_KEY=pplx-xxxxxxxxxxxx
 PERPLEXITY_MODEL=sonar
@@ -393,11 +351,11 @@ PORT=4000
 # Git MCP (Local)
 REPO_PATH=D:\perplexity-chat  # Windows: абсолютный путь
 
-# Ollama (Local LLM) 🆕
+# Ollama (Local LLM)
 OLLAMA_URL=http://localhost:11434
 OLLAMA_MODEL=gemma3:4b
 
-# Analytics (NEW) 🆕
+# Analytics
 ANALYTICS_CSV=data/events.csv
 ANALYTICS_LOG=data/errors.log
 ANALYTICS_JSON=data/funnel.json
@@ -406,50 +364,50 @@ ANALYTICS_JSON=data/funnel.json
 GITHUB_TOKEN=ghp_xxxxxxxxxxxx
 GITHUB_OWNER=Luno-o
 GITHUB_REPO=perplexity-chat
-```
-
-### Production - Railway (Backend)
-
-```bash
+Production - Railway (Backend)
+bash
 PERPLEXITY_API_KEY=<from GitHub Secrets>
 PERPLEXITY_MODEL=sonar
 REPO_PATH=/app/repo
 PORT=4000
 NODE_ENV=production
 # Ollama недоступна в production (только локально)
-```
-
-### Production - Vercel (Frontend)
-
-```bash
+Production - Vercel (Frontend)
+bash
 VITE_API_URL=https://your-backend.railway.app
 NODE_VERSION=20
-```
-
-## Team Assistant Features
-
-### 🌐 Perplexity Mode (Default)
-
+Team Assistant Features
+🌐 Perplexity Mode (Default) + Персонализация
 ✅ Управление задачами (создание, просмотр, удаление)
 ✅ Приоритизация задач с учётом Git изменений
 ✅ Статус проекта и аналитика
 ✅ Git операции (status, commits, history)
 ✅ RAG поиск в документации
-✅ Умный анализ и рекомендации
+✅ Персонализированные ответы на основе профиля пользователя (userPersonalizationService)
+✅ Финальная формулировка ответа через Perplexity с кастомным system prompt, в который подмешиваются:
+
+имя пользователя (например, Сергей),
+
+предпочитаемый язык и стиль,
+
+стек (Node.js, React, Docker, MCP, Ollama),
+
+текущий проект (perplexity-chat),
+
+предпочтения по формату ответов (кратко, с кодом и т.д.). [file:77][file:84]
 
 Примеры команд:
 
-```
+text
 "Покажи все задачи"
 "Что делать первым?"
 "Статус проекта"
 "Создай задачу: исправить баг, приоритет high"
 "Как работает RAG в этом проекте?"
 "Покажи последние 5 коммитов"
-```
-
-### 🤖 Ollama Mode (Local LLM)
-
+"Как оптимизировать Docker?"
+"Как оптимизировать Docker для perplexity-chat?"
+🤖 Ollama Mode (Local LLM)
 ✅ Быстрые ответы без интернета
 ✅ Приватность (все данные локально)
 ✅ Поддержка русского языка
@@ -458,20 +416,18 @@ NODE_VERSION=20
 
 Активация:
 
-- Переключить на "🤖 Ollama" в интерфейсе
-- Задать вопрос напрямую
+Переключить на "🤖 Ollama" в интерфейсе Team Assistant.
+
+Задать вопрос напрямую (в текущей версии Team Assistant финальный ответ формирует Perplexity; локальная LLM используется для других сценариев и может быть возвращена в Team Assistant позже). [file:83][file:84]
 
 Примеры запросов:
 
-```
+text
 "Что такое MCP протокол?"
 "Объясни как работает RAG"
 "Как настроить Docker контейнер?"
 "В чём разница между REST и GraphQL?"
-```
-
-### 🧪 LLM Optimization (NEW)
-
+🧪 LLM Optimization
 Страница для тестирования и настройки параметров локальной LLM:
 
 ✅ Просмотр доступных моделей и пресетов
@@ -479,40 +435,29 @@ NODE_VERSION=20
 ✅ Сравнение производительности разных конфигураций
 ✅ Использование готовых шаблонов промптов
 
-### 📊 Analytics Assistant (NEW)
-
+📊 Analytics Assistant
 Чат для анализа логов и продуктовой воронки:
 
 ✅ Вопросы про шаги воронки и drop-off пользователей
-✅ Анализ ошибок по маршрутам (`/api/login`, `/api/signup` и т.п.)
+✅ Анализ ошибок по маршрутам (/api/login, /api/signup и т.п.)
 ✅ Рекомендации по приоритету исправлений
 ✅ Работает с локальной LLM (Ollama) для быстрых ответов
 
 Примеры запросов:
 
-```
+text
 "На каком шаге воронки больше всего потеря пользователей?"
 "Какой маршрут имеет больше всего ошибок?"
 "Дай рекомендации по улучшению воронки"
-```
-
-## Monitoring & Debugging
-
-### Railway Logs
-
-```bash
+Monitoring & Debugging
+Railway Logs
+bash
 railway logs --service backend --tail
-```
-
-### Vercel Logs
-
-```bash
+Vercel Logs
+bash
 vercel logs https://your-app.vercel.app
-```
-
-### Ollama Logs
-
-```bash
+Ollama Logs
+bash
 # Проверка статуса
 curl http://localhost:11434
 
@@ -526,11 +471,8 @@ ollama run gemma3:4b
 curl -X POST http://localhost:11434/api/generate \
   -H "Content-Type: application/json" \
   -d '{"model": "gemma3:4b", "prompt": "Hello", "stream": false}'
-```
-
-### Health Check
-
-```bash
+Health Check
+bash
 # Backend
 curl https://your-backend.railway.app/api/health
 
@@ -540,35 +482,28 @@ curl https://your-backend.railway.app/api/health
 curl http://localhost:4000/api/local-llm/health
 
 # Response: {"status": "ok", "url": "http://localhost:11434", "model": "gemma3:4b"}
-```
-
-## Testing
-
-### Local Testing
-
-```bash
+Testing
+Local Testing
+bash
 # Backend health
 curl http://localhost:4000/api/health
 
-# Team Assistant test (Perplexity)
+# Team Assistant test (Perplexity + personalization)
 curl -X POST http://localhost:4000/api/team/ask \
   -H "Content-Type: application/json" \
-  -d '{"query": "Статус проекта"}'
+  -d '{"query": "Как оптимизировать Docker?", "user_id": "luno-o", "llmMode": "perplexity", "personalizationEnabled": true}'
 
 # Local LLM test (Ollama)
 curl -X POST http://localhost:4000/api/local-llm/ask \
   -H "Content-Type: application/json" \
   -d '{"prompt": "Что такое MCP?"}'
 
-# Analytics test (NEW)
+# Analytics test
 curl -X POST http://localhost:4000/api/analytics/chat \
   -H "Content-Type: application/json" \
-  -d '{"query": "На каком шаге воронки больше потерь?"}'
-```
-
-### Production Testing
-
-```bash
+  -d "{\"query\": \"На каком шаге воронки больше потерь?\"}"
+Production Testing
+bash
 # Frontend (Vercel)
 curl https://your-app.vercel.app
 
@@ -579,65 +514,63 @@ curl https://your-backend.railway.app/api/health
 curl -X POST https://your-backend.railway.app/api/team/ask \
   -H "Content-Type: application/json" \
   -d '{"query": "Покажи задачи"}'
-```
+Troubleshooting
+Railway Deployment Fails
+Error: Railpack could not determine how to build
 
-## Troubleshooting
+Solution:
 
-### Railway Deployment Fails
+Установите Root Directory: /server (Settings → Source)
 
-**Error**: Railpack could not determine how to build
+Создайте railway.json с startCommand
 
-**Solution**:
-- Установите Root Directory: `/server` (Settings → Source)
-- Создайте railway.json с startCommand
-- Проверьте package.json имеет start скрипт
+Проверьте package.json имеет start скрипт
 
-**Error**: Module not found в production
+Error: Module not found в production
 
-**Solution**:
-- Проверьте зависимости в package.json (не в devDependencies)
-- Убедитесь что npm install выполняется перед start
+Solution:
 
-### Vercel Deployment Fails
+Проверьте зависимости в package.json (не в devDependencies)
 
-**Error**: Build failed
+Убедитесь что npm install выполняется перед start
 
-**Solution**:
-- Проверьте vercel.json → buildCommand и outputDirectory
-- Установите Node.js версию через NODE_VERSION env var
-- Убедитесь что npm run build работает локально
+Vercel Deployment Fails
+Error: Build failed
 
-**Error**: 404 on refresh
+Solution:
 
-**Solution**: Добавьте в vercel.json:
+Проверьте vercel.json → buildCommand и outputDirectory
 
-```json
+Установите Node.js версию через NODE_VERSION env var
+
+Убедитесь что npm run build работает локально
+
+Error: 404 on refresh
+
+Solution: Добавьте в vercel.json:
+
+json
 {
   "routes": [
     { "src": "/[^.]+", "dest": "/", "status": 200 }
   ]
 }
-```
+Ollama Issues
+Error: Connection refused (localhost:11434)
 
-### Ollama Issues
+Solution:
 
-**Error**: Connection refused (localhost:11434)
-
-**Solution**:
-
-```bash
+bash
 # Windows
 ollama serve
 
 # Проверка
 curl http://localhost:11434
-```
+Error: Model not found
 
-**Error**: Model not found
+Solution:
 
-**Solution**:
-
-```bash
+bash
 # Список моделей
 ollama list
 
@@ -646,116 +579,171 @@ ollama pull gemma3:4b
 
 # Проверить в коде
 # server/.env: OLLAMA_MODEL=gemma3:4b
-```
+Error: 404 on /api/generate
 
-**Error**: 404 on /api/generate
+Solution:
 
-**Solution**:
-- Проверьте версию Ollama: `ollama --version`
-- Обновите до последней: скачайте с ollama.com
-- Перезапустите: `ollama serve`
+Проверьте версию Ollama: ollama --version
 
-### CORS Errors
+Обновите до последней: скачайте с ollama.com
 
-**Error**: Access-Control-Allow-Origin
+Перезапустите: ollama serve
 
-**Solution** (server/index.js):
+CORS Errors
+Error: Access-Control-Allow-Origin
 
-```javascript
+Solution (server/index.js):
+
+javascript
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
     ? 'https://your-app.vercel.app'
     : 'http://localhost:5173'
 }));
-```
+Analytics Issues
+Error: __dirname is not defined при загрузке индексов
 
-### Analytics Issues
+Solution: В файлах, где читаются индексы (ragService, analyticsService), добавьте:
 
-**Error**: `__dirname is not defined` при загрузке индексов
-
-**Solution**: В файлах, где читаются индексы (ragService, analyticsService), добавьте:
-
-```javascript
+javascript
 import path from "path";
 import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-```
+Error: analyticsService возвращает пустые агрегаты
 
-**Error**: analyticsService возвращает пустые агрегаты
+Solution: Убедитесь что data/events.csv, data/errors.log, data/funnel.json существуют и заполнены тестовыми данными
 
-**Solution**: Убедитесь что `data/events.csv`, `data/errors.log`, `data/funnel.json` существуют и заполнены тестовыми данными
+Версионирование
+Версия: v1.5.0
+Дата обновления: 2026-01-27 22:27 MSK
+Статус: ✅ Production Ready + Local LLM + Analytics + Персонализация Team Assistant
 
-## Версионирование
+Изменения v1.5.0:
+🆕 userPersonalizationService.js
 
-Версия: **v1.4.0+**
-Дата обновления: 2026-01-26 21:55 MSK
-Статус: ✅ Production Ready + Local LLM + Analytics
+Хранение профилей пользователей в server/userProfiles/*.json
 
-### Изменения v1.4.0+:
+Генерация персонализированного system prompt (язык, стиль, стек, проект, тон)
 
-🆕 **analyticsService.js** — полная реализация:
-- `loadAndParse()` — читает events.csv, errors.log, funnel.json
-- `aggregate()` — считает воронку, drop-off по шагам, ошибки по маршрутам
-- `analyzeData()` — готовит JSON-агрегаты и спрашивает локальную LLM
+Возврат метаданных профиля для UI (имя, роль, предпочтения). [file:77]
 
-🆕 **analyticsChatService.js** — LLM-обёртка над analyticsService
+🆕 Персонализированный Team Assistant
 
-🆕 **analyticsConfig.js** — конфигурация путей источников данных
+teamAssistantService.processTeamQuery:
 
-🆕 **envBootstrap.js** — bootstrap окружения через file.env
+принимает userId, llmMode, personalizationEnabled,
 
-🆕 **check-env.js** — утилита проверки переменных окружения
+использует MCP (Tasks, Git, RAG) для получения структурированных данных,
 
-🆕 **data/** — директория с тестовыми данными для аналитики:
-- events.csv (события с маршрутами и статус-кодами)
-- errors.log (логи ошибок с route в квадратных скобках)
-- funnel.json (воронка с шагами и количеством пользователей)
+собирает персонализированный system prompt через userPersonalizationService,
 
-🆕 **AnalyticsPage.jsx** + компоненты — UI для Analytics Assistant
+вызывает Perplexity (sonar) с этим system prompt для финальной формулировки ответа. [file:84]
 
-✅ `/api/analytics/query` и `/api/analytics/chat` эндпоинты в index.js
+Поддержка флагов и метаданных:
 
-### Изменения v1.3.0:
+result.personalized,
 
+result.personalizationProfile,
+
+result.llmUsed. [file:84]
+
+🔄 TeamAssistantPage.jsx
+
+Добавлена кнопка “🎯 Персонализация: ВКЛ/ВЫКЛ”.
+
+При включении:
+
+загружает профиль пользователя (/api/personalization/profile/:user_id),
+
+отправляет в /api/team/ask флаг personalizationEnabled: true и user_id: "luno-o",
+
+отображает бейджи “Персонализировано” и имя профиля (например, Сергей). [file:19]
+
+✅ /api/team/ask
+
+Обновлён эндпоинт в server/index.js:
+
+принимает {query, user_id, llmMode, personalizationEnabled},
+
+логирует параметры,
+
+прокидывает их в processTeamQuery. [file:85]
+
+Изменения v1.4.0:
+🆕 analyticsService.js — полная реализация:
+
+loadAndParse() — читает events.csv, errors.log, funnel.json
+
+aggregate() — считает воронку, drop-off по шагам, ошибки по маршрутам
+
+analyzeData() — готовит JSON-агрегаты и спрашивает локальную LLM
+
+🆕 analyticsChatService.js — LLM-обёртка над analyticsService
+
+🆕 analyticsConfig.js — конфигурация путей источников данных
+
+🆕 envBootstrap.js — bootstrap окружения через file.env
+
+🆕 check-env.js — утилита проверки переменных окружения
+
+🆕 data/ — директория с тестовыми данными для аналитики:
+
+events.csv (события с маршрутами и статус-кодами)
+
+errors.log (логи ошибок с route в квадратных скобках)
+
+funnel.json (воронка с шагами и количеством пользователей)
+
+🆕 AnalyticsPage.jsx + компоненты — UI для Analytics Assistant
+
+✅ /api/analytics/query и /api/analytics/chat эндпоинты в index.js
+
+Изменения v1.3.0:
 🤖 Добавлена интеграция с локальной LLM (Ollama)
-- server/localLlmClient.js - клиент для Ollama API
-- server/teamAssistantService.js - обновлён с поддержкой локальной LLM
-- client/src/pages/TeamAssistantPage.jsx - добавлен LLM switcher
-- Документация по установке и использованию Ollama
 
-### Изменения v1.2.0:
+server/localLlmClient.js - клиент для Ollama API
 
+server/teamAssistantService.js - обновлён с поддержкой локальной LLM (в v1.5.0 финальный ответ перенесён на Perplexity, локальная LLM остаётся для других сценариев)
+
+client/src/pages/TeamAssistantPage.jsx - добавлен LLM switcher
+
+Документация по установке и использованию Ollama
+
+Изменения v1.2.0:
 🚀 Добавлен CI/CD через GitHub Actions
-- Деплой на Vercel (Frontend) + Railway (Backend)
-- GitHub Secrets integration
-- Документация по deployment
 
-## Roadmap
+Деплой на Vercel (Frontend) + Railway (Backend)
 
-### v1.5.0 (Next Release)
+GitHub Secrets integration
 
-- 🎯 Streaming ответов от локальной LLM
-- 🔄 Автоматический выбор LLM (routing)
-- 📈 Метрики производительности LLM
-- 🌍 Kubernetes deployment (alternative to Railway)
-- 🚀 Multi-region deployment
-- 🗄️ Redis caching layer
-- 📊 Grafana/Prometheus monitoring
+Документация по deployment
 
-### v2.0.0 (Future)
+Roadmap
+v1.6.0 (Next Release)
+🎯 Streaming ответов от локальной LLM в UI Team Assistant
 
-- 🤖 Advanced RAG с re-ranking
-- 🎭 Multi-modal LLM (vision models)
-- 🔐 Fine-tuned models для domain-specific задач
-- 📱 Mobile apps (React Native)
-- 🌐 WebSocket для real-time updates
+🔄 Автоматический выбор LLM (routing) между Perplexity и Ollama
 
-## Лицензия
+📈 Более тонкая персонализация (контекст проекта, активные задачи, статус Git)
 
+📌 Сохранение истории персонализации и предпочтений пользователя
+
+v2.0.0 (Future)
+🤖 Advanced RAG с re-ranking
+
+🎭 Multi-modal LLM (vision models)
+
+🔐 Fine-tuned models для domain-specific задач
+
+📱 Mobile apps (React Native)
+
+🌐 WebSocket для real-time updates
+
+Лицензия
 MIT
 
-**Разработка**: AI Challenge 23 - MCP Integration + RAG + CI/CD + Local LLM + Analytics
-**Статус**: ✅ Production Ready (v1.4.0+)
-**Последнее обновление**: 2026-01-26 21:55 MSK
+Разработка: AI Challenge 23 - MCP Integration + RAG + CI/CD + Local LLM + Analytics + Personalized Team Assistant
+Статус: ✅ Production Ready (v1.5.0)
+Последнее обновление: 2026-01-27 22:27 MSK

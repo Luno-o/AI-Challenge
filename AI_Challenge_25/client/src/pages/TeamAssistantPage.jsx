@@ -1,13 +1,12 @@
 // client/src/pages/TeamAssistantPage.jsx
-
 import React, { useState, useRef, useEffect } from 'react';
+import { useVoiceInput } from '../hooks/useVoiceInput';
 import '../styles/TeamAssistantPage.css';
 
 const TeamAssistantPage = () => {
   // ========================================
   // STATE
   // ========================================
-  
   const [messages, setMessages] = useState([
     {
       type: 'assistant',
@@ -15,21 +14,58 @@ const TeamAssistantPage = () => {
       metadata: { timestamp: new Date() }
     }
   ]);
-
+  
   const [inputValue, setInputValue] = useState('');
   const [loading, setLoading] = useState(false);
   const [llmMode, setLlmMode] = useState('ollama');
   const [personalizationEnabled, setPersonalizationEnabled] = useState(false);
   const [userProfile, setUserProfile] = useState(null);
   const [userId] = useState('luno-o'); // Можно сделать динамичным
-
+  
+  // 🆕 Voice input state
+  const [voiceLanguage, setVoiceLanguage] = useState('ru-RU');
+  
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+
+  // 🆕 Voice input hook
+  const {
+    isListening,
+    transcript,
+    error: voiceError,
+    isSupported: isVoiceSupported,
+    startListening,
+    stopListening
+  } = useVoiceInput(
+    (text, confidence) => {
+      // Callback при успешном распознавании
+      console.log('✅ Voice recognized:', text, `confidence: ${(confidence * 100).toFixed(1)}%`);
+      setInputValue(text);
+      
+      // Автоматическая отправка если уверенность > 80%
+      if (confidence > 0.8) {
+        // Отправить через небольшую задержку чтобы пользователь увидел текст
+        setTimeout(() => {
+          handleSendMessage(null, text, true);
+        }, 300);
+      }
+    },
+    (error) => {
+      // Callback при ошибке
+      console.error('❌ Voice error:', error);
+      setMessages(prev => [...prev, {
+        type: 'system',
+        content: `⚠️ ${error}`,
+        metadata: { timestamp: new Date(), error: true }
+      }]);
+    },
+    voiceLanguage
+  );
 
   // ========================================
   // EFFECTS
   // ========================================
-
+  
   // Скролл к последнему сообщению
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -52,11 +88,10 @@ const TeamAssistantPage = () => {
   const loadUserProfile = async () => {
     try {
       console.log(`[Frontend] Loading profile for ${userId}`);
-      
       const response = await fetch(
         `http://localhost:5000/api/personalization/profile/${userId}`
       );
-
+      
       if (!response.ok) {
         console.warn(`[Frontend] Profile not found for ${userId}`);
         return;
@@ -64,7 +99,6 @@ const TeamAssistantPage = () => {
 
       const data = await response.json();
       setUserProfile(data.profile);
-      
       console.log(`[Frontend] Profile loaded:`, data.profile.name);
     } catch (error) {
       console.error('[Frontend] Error loading profile:', error);
@@ -72,20 +106,31 @@ const TeamAssistantPage = () => {
   };
 
   /**
-   * Отправить сообщение
+   * 🔄 Отправить сообщение (обновлено для поддержки голосового ввода)
+   * @param {Event|null} e - Event от формы (может быть null для voice)
+   * @param {string|null} messageText - Текст сообщения (для voice input)
+   * @param {boolean} isVoice - Флаг голосового ввода
    */
-  const handleSendMessage = async (e) => {
-    e.preventDefault();
+  const handleSendMessage = async (e, messageText = null, isVoice = false) => {
+    // Предотвратить default только если это событие формы
+    if (e) {
+      e.preventDefault();
+    }
 
-    if (!inputValue.trim()) return;
+    const queryText = messageText || inputValue;
+    
+    if (!queryText.trim()) return;
 
     // Добавить сообщение пользователя
     const userMessage = {
       type: 'user',
-      content: inputValue,
-      metadata: { timestamp: new Date() }
+      content: queryText,
+      metadata: { 
+        timestamp: new Date(),
+        voiceInput: isVoice // 🆕 Отметка голосового ввода
+      }
     };
-
+    
     setMessages(prev => [...prev, userMessage]);
     setInputValue('');
     setLoading(true);
@@ -94,13 +139,14 @@ const TeamAssistantPage = () => {
       console.log('[Frontend] Sending query...');
       console.log(`[Frontend] LLM: ${llmMode}`);
       console.log(`[Frontend] Personalization: ${personalizationEnabled}`);
+      console.log(`[Frontend] Voice Input: ${isVoice}`);
 
       // Отправить запрос на backend
       const response = await fetch('http://localhost:5000/api/team/ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          query: inputValue,
+          query: queryText,
           llmMode,
           personalizationEnabled,
           user_id: personalizationEnabled ? userId : null
@@ -127,20 +173,31 @@ const TeamAssistantPage = () => {
 
       setMessages(prev => [...prev, assistantMessage]);
       console.log('[Frontend] Response received');
-
     } catch (error) {
       console.error('[Frontend] Error sending message:', error);
-
       const errorMessage = {
         type: 'assistant',
         content: `❌ Ошибка: ${error.message}. Проверь, что backend запущен на http://localhost:5000`,
-        metadata: { timestamp: new Date(), error: true }
+        metadata: {
+          timestamp: new Date(),
+          error: true
+        }
       };
-
       setMessages(prev => [...prev, errorMessage]);
     } finally {
       setLoading(false);
       inputRef.current?.focus();
+    }
+  };
+
+  /**
+   * 🆕 Обработчик голосового ввода
+   */
+  const handleVoiceInput = () => {
+    if (isListening) {
+      stopListening();
+    } else {
+      startListening();
     }
   };
 
@@ -187,124 +244,123 @@ const TeamAssistantPage = () => {
   };
 
   return (
-    <div className="team-assistant-container">
-      {/* ========== HEADER ========== */}
-      <header className="team-assistant-header">
-        <div className="header-left">
-          <h1>🤖 Team Assistant</h1>
-          <p>Персонализированный AI помощник разработчика</p>
+    <div className="team-assistant-page">
+      {/* ======================================== */}
+      {/* HEADER */}
+      {/* ======================================== */}
+      <div className="assistant-header">
+        <div className="header-top">
+          <h1 className="assistant-title">
+            🤖 Team Assistant
+            {personalizationEnabled && userProfile && (
+              <span className="profile-name"> ({userProfile.name})</span>
+            )}
+          </h1>
+          
+          <button 
+            onClick={handleClearChat}
+            className="clear-button"
+            title="Очистить чат"
+          >
+            🗑️
+          </button>
         </div>
 
-        <div className="header-right">
-          {/* Профиль пользователя */}
-          {personalizationEnabled && userProfile && (
-            <div className="user-profile-badge">
-              <span className="profile-avatar">👤</span>
-              <div className="profile-info">
-                <div className="profile-name">{userProfile.name}</div>
-                <div className="profile-role">{userProfile.role}</div>
+        <div className="controls">
+          {/* LLM Switcher */}
+          <div className="control-group">
+            <label className="control-label">Модель:</label>
+            <button
+              onClick={handleSwitchLLM}
+              className={`llm-switch-button ${llmMode}`}
+              title={`Текущая модель: ${llmMode}`}
+            >
+              {llmMode === 'ollama' ? '🤖 Ollama' : '🌐 Perplexity'}
+            </button>
+          </div>
+
+          {/* Персонализация */}
+          <div className="control-group">
+            <label className="control-label">Персонализация:</label>
+            <button
+              onClick={handleTogglePersonalization}
+              className={`personalization-button ${personalizationEnabled ? 'enabled' : ''}`}
+              title={personalizationEnabled ? 'Отключить персонализацию' : 'Включить персонализацию'}
+            >
+              {personalizationEnabled ? '🎯 ВКЛ' : '⭕ ВЫКЛ'}
+            </button>
+          </div>
+
+          {/* 🆕 Голосовой ввод статус */}
+          {isVoiceSupported && (
+            <div className="control-group">
+              <label className="control-label">Голос:</label>
+              <div className={`voice-status-badge ${isListening ? 'listening' : ''}`}>
+                {isListening ? '🎤 Слушаю...' : '🎤 Готов'}
               </div>
             </div>
           )}
         </div>
-      </header>
-
-      {/* ========== CONTROLS ========== */}
-      <div className="team-assistant-controls">
-        {/* Кнопка персонализации */}
-        <button
-          className={`btn-personalization ${personalizationEnabled ? 'active' : ''}`}
-          onClick={handleTogglePersonalization}
-          title={personalizationEnabled ? 'Отключить персонализацию' : 'Включить персонализацию'}
-        >
-          <span className="btn-icon">🎯</span>
-          <span className="btn-text">
-            {personalizationEnabled ? 'Персонализация: ВКЛ' : 'Персонализация: ВЫКЛ'}
-          </span>
-        </button>
-
-        {/* LLM Switcher */}
-        <button
-          className="btn-llm-switch"
-          onClick={handleSwitchLLM}
-          title="Переключить LLM модель"
-        >
-          <span className="btn-icon">{llmMode === 'ollama' ? '🏠' : '☁️'}</span>
-          <span className="btn-text">{llmMode === 'ollama' ? 'Ollama' : 'Perplexity'}</span>
-        </button>
-
-        {/* Очистить чат */}
-        <button
-          className="btn-clear"
-          onClick={handleClearChat}
-          title="Очистить историю чата"
-        >
-          <span className="btn-icon">🗑️</span>
-          <span className="btn-text">Очистить</span>
-        </button>
       </div>
 
-      {/* ========== MESSAGES ========== */}
+      {/* ======================================== */}
+      {/* MESSAGES */}
+      {/* ======================================== */}
       <div className="messages-container">
-        {messages.map((msg, idx) => (
-          <div key={idx} className={`message message-${msg.type}`}>
-            <div className="message-avatar">
-              {msg.type === 'user' ? '👨‍💻' : '🤖'}
-            </div>
-
-            <div className="message-content-wrapper">
-              <div className="message-content">
-                <p>{msg.content}</p>
-              </div>
-
-              {/* Метаданные */}
-              {msg.metadata && (
-                <div className="message-metadata">
-                  <span className="timestamp">
-                    {getMessageTime(msg.metadata.timestamp)}
-                  </span>
-
-                  {/* Индикатор персонализации */}
-                  {msg.metadata.personalized && (
-                    <span className="badge badge-personalized" title="Ответ персонализирован">
-                      🎯 Персонализировано
-                    </span>
-                  )}
-
-                  {/* Индикатор LLM */}
-                  {msg.metadata.llmUsed && (
-                    <span
-                      className={`badge badge-llm badge-${msg.metadata.llmUsed}`}
-                      title={`LLM: ${msg.metadata.llmUsed}`}
-                    >
-                      {msg.metadata.llmUsed === 'ollama' ? '🏠 Ollama' : '☁️ Perplexity'}
-                    </span>
-                  )}
-
-                  {/* Профиль в метаданных */}
-                  {msg.metadata.personalizationProfile && (
-                    <span className="badge badge-profile">
-                      👤 {msg.metadata.personalizationProfile}
-                    </span>
-                  )}
-                </div>
+        {messages.map((msg, index) => (
+          <div
+            key={index}
+            className={`message ${msg.type} ${msg.metadata?.error ? 'error' : ''}`}
+          >
+            <div className="message-content">
+              {/* 🆕 Voice badge для голосовых сообщений */}
+              {msg.metadata?.voiceInput && (
+                <span className="voice-badge" title="Голосовой ввод">🎤</span>
               )}
+              
+              <div className="message-text">{msg.content}</div>
+              
+              <div className="message-meta">
+                <span className="message-time">
+                  {getMessageTime(msg.metadata.timestamp)}
+                </span>
+                
+                {/* Метаданные ответа */}
+                {msg.type === 'assistant' && msg.metadata.llmUsed && (
+                  <span className="llm-badge">
+                    {msg.metadata.llmUsed === 'ollama' ? '🤖' : '🌐'} {msg.metadata.llmUsed}
+                  </span>
+                )}
+                
+                {msg.metadata?.personalized && (
+                  <span className="personalized-badge" title="Персонализированный ответ">
+                    🎯 Персонализировано
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         ))}
 
-        {/* Индикатор загрузки */}
+        {/* Loading indicator */}
         {loading && (
-          <div className="message message-assistant loading">
-            <div className="message-avatar">🤖</div>
-            <div className="message-content-wrapper">
-              <div className="message-content">
-                <div className="typing-indicator">
-                  <span></span>
-                  <span></span>
-                  <span></span>
-                </div>
+          <div className="message assistant loading">
+            <div className="message-content">
+              <div className="typing-indicator">
+                <span></span>
+                <span></span>
+                <span></span>
               </div>
+              <div className="message-text">Думаю...</div>
+            </div>
+          </div>
+        )}
+
+        {/* 🆕 Voice error display */}
+        {voiceError && !loading && (
+          <div className="message system error">
+            <div className="message-content">
+              <div className="message-text">⚠️ {voiceError}</div>
             </div>
           </div>
         )}
@@ -312,49 +368,85 @@ const TeamAssistantPage = () => {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* ========== INPUT ========== */}
-      <form className="input-form" onSubmit={handleSendMessage}>
-        <input
-          ref={inputRef}
-          type="text"
-          className="message-input"
-          placeholder="Введи вопрос или команду..."
-          value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
-          disabled={loading}
-          autoFocus
-        />
-        <button
-          type="submit"
-          className="btn-send"
-          disabled={loading || !inputValue.trim()}
-          title="Отправить сообщение"
-        >
-          <span className="btn-icon">📤</span>
-        </button>
+      {/* ======================================== */}
+      {/* 🆕 VOICE STATUS BAR (когда слушаем) */}
+      {/* ======================================== */}
+      {isListening && (
+        <div className="voice-listening-bar">
+          <div className="pulse-indicator" />
+          <span className="listening-text">Говорите сейчас...</span>
+          <button 
+            onClick={stopListening}
+            className="stop-listening-button"
+          >
+            ⏹️ Остановить
+          </button>
+        </div>
+      )}
+
+      {/* ======================================== */}
+      {/* 🔄 INPUT FORM (обновлено с голосом) */}
+      {/* ======================================== */}
+      <form onSubmit={handleSendMessage} className="input-form">
+        <div className="input-container">
+          <input
+            ref={inputRef}
+            type="text"
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            placeholder={
+              isListening 
+                ? "🎤 Слушаю..." 
+                : "Введите запрос или используйте голосовой ввод..."
+            }
+            disabled={loading || isListening}
+            className={`message-input ${isListening ? 'listening' : ''}`}
+          />
+
+          {/* 🆕 Кнопка голосового ввода */}
+          {isVoiceSupported && (
+            <button
+              type="button"
+              onClick={handleVoiceInput}
+              disabled={loading}
+              className={`voice-button ${isListening ? 'listening' : ''}`}
+              title={isListening ? 'Остановить запись' : 'Начать голосовой ввод'}
+            >
+              🎤
+            </button>
+          )}
+
+          {/* 🆕 Переключатель языка распознавания */}
+          {isVoiceSupported && !isListening && (
+            <select
+              value={voiceLanguage}
+              onChange={(e) => setVoiceLanguage(e.target.value)}
+              className="language-selector"
+              disabled={loading || isListening}
+              title="Язык распознавания речи"
+            >
+              <option value="ru-RU">🇷🇺 RU</option>
+              <option value="en-US">🇺🇸 EN</option>
+            </select>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading || !inputValue.trim() || isListening}
+            className="send-button"
+          >
+            {loading ? '⏳' : '📤'}
+          </button>
+        </div>
+
+        {/* 🆕 Voice support warning */}
+        {!isVoiceSupported && (
+          <div className="voice-warning">
+            ⚠️ Голосовой ввод не поддерживается в этом браузере. 
+            Используйте Chrome или Edge.
+          </div>
+        )}
       </form>
-
-      {/* ========== STATUS BAR ========== */}
-      <div className="status-bar">
-        <div className="status-item">
-          <span className="status-label">LLM:</span>
-          <span className={`status-value llm-${llmMode}`}>
-            {llmMode === 'ollama' ? '🏠 Ollama (локальная)' : '☁️ Perplexity (облако)'}
-          </span>
-        </div>
-
-        <div className="status-item">
-          <span className="status-label">Персонализация:</span>
-          <span className={`status-value personalization-${personalizationEnabled}`}>
-            {personalizationEnabled ? '✅ ВКЛ' : '❌ ВЫКЛ'}
-          </span>
-        </div>
-
-        <div className="status-item">
-          <span className="status-label">Сообщений:</span>
-          <span className="status-value">{messages.length}</span>
-        </div>
-      </div>
     </div>
   );
 };

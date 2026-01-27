@@ -8,6 +8,9 @@ FROM node:20-alpine AS backend-builder
 
 WORKDIR /app/server
 
+# Установить wget для healthcheck
+RUN apk add --no-cache wget
+
 # Скопировать package files
 COPY server/package*.json ./
 
@@ -20,23 +23,31 @@ RUN npm ci --only=production
 
 FROM node:20-alpine AS backend
 
+# Установить wget для healthcheck
+RUN apk add --no-cache wget
+
 WORKDIR /app/server
 
 # Скопировать зависимости из builder
 COPY --from=backend-builder /app/server/node_modules ./node_modules
 
 # Скопировать backend код
-COPY server .
+COPY server ./
 
-# Создать директорию для профилей
-RUN mkdir -p /app/server/userProfiles
+# Создать необходимые директории
+RUN mkdir -p \
+    /app/server/userProfiles \
+    /app/server/documents \
+    /app/server/indexes \
+    /app/server/data \
+    /app/server/temp
 
 # Expose порт
 EXPOSE 5000
 
 # Healthcheck
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:5000/api/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
+  CMD wget --no-verbose --tries=1 --spider http://localhost:5000/api/health || exit 1
 
 # Start command
 CMD ["node", "index.js"]
@@ -56,36 +67,37 @@ COPY client/package*.json ./
 RUN npm ci
 
 # Скопировать frontend код
-COPY client .
+COPY client ./
 
-# Build
+# Build (для production)
 RUN npm run build
 
 # ========================================
-# STAGE 4: FRONTEND RUNTIME
+# STAGE 4: FRONTEND RUNTIME (Development)
 # ========================================
 
 FROM node:20-alpine AS frontend
 
-WORKDIR /app/client
+# Установить wget для healthcheck
+RUN apk add --no-cache wget
 
-# Установить serve для статик файлов
-RUN npm install -g serve
+WORKDIR /app/client
 
 # Скопировать package files
 COPY client/package*.json ./
 
-# Скопировать node_modules и build из builder
-COPY --from=frontend-builder /app/client/node_modules ./node_modules
-COPY --from=frontend-builder /app/client/dist ./dist
-COPY --from=frontend-builder /app/client/src ./src
+# Установить зависимости (включая dev для Vite)
+RUN npm ci
 
-# Expose порт
-EXPOSE 3000
+# Скопировать src код (для development hot-reload)
+COPY client ./
+
+# Expose порт Vite
+EXPOSE 5173
 
 # Healthcheck
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3000', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
+  CMD wget --no-verbose --tries=1 --spider http://localhost:5173 || exit 1
 
-# Start command для development
-CMD ["npm", "run", "dev"]
+# Start Vite dev server
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173"]
