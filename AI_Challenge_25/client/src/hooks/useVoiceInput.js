@@ -1,95 +1,110 @@
-import { useState, useCallback, useRef } from 'react';
+// client/src/hooks/useVoiceInput.js
+
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 /**
- * Custom hook для управления Web Speech API
- * @param {Function} onResult - Callback при успешном распознавании
- * @param {Function} onError - Callback при ошибке
- * @param {string} language - Язык распознавания ('ru-RU', 'en-US')
+ * Hook для работы с голосовым вводом (Web Speech API)
  */
-export const useVoiceInput = (onResult, onError = null, language = 'ru-RU') => {
+export function useVoiceInput(
+  onResult = () => {},
+  onError = () => {},
+  language = 'ru-RU'
+) {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [error, setError] = useState(null);
+  const [isSupported, setIsSupported] = useState(false);
+  
   const recognitionRef = useRef(null);
 
-  const isSupported = 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window;
+  // Проверка поддержки Web Speech API
+  useEffect(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    
+    if (SpeechRecognition) {
+      setIsSupported(true);
+      recognitionRef.current = new SpeechRecognition();
+      
+      // Настройки
+      recognitionRef.current.continuous = false;
+      recognitionRef.current.interimResults = false;
+      recognitionRef.current.lang = language;
+      
+      // Обработчики событий
+      recognitionRef.current.onresult = (event) => {
+        const result = event.results[0];
+        const text = result[0].transcript;
+        const confidence = result[0].confidence;
+        
+        console.log('🎤 Voice result:', text, `(${(confidence * 100).toFixed(1)}%)`);
+        
+        setTranscript(text);
+        setIsListening(false);
+        
+        if (onResult) {
+          onResult(text, confidence);
+        }
+      };
+      
+      recognitionRef.current.onerror = (event) => {
+        console.error('🎤 Voice error:', event.error);
+        setError(event.error);
+        setIsListening(false);
+        
+        if (onError) {
+          onError(event.error);
+        }
+      };
+      
+      recognitionRef.current.onend = () => {
+        setIsListening(false);
+      };
+    } else {
+      setIsSupported(false);
+      console.warn('⚠️ Web Speech API not supported');
+    }
+    
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.abort();
+      }
+    };
+  }, [language, onResult, onError]);
 
+  // Начать прослушивание
   const startListening = useCallback(() => {
     if (!isSupported) {
-      const err = 'Голосовой ввод не поддерживается в этом браузере. Используйте Chrome или Edge.';
+      const err = 'Web Speech API не поддерживается в этом браузере';
       setError(err);
-      onError?.(err);
+      if (onError) onError(err);
       return;
     }
-
-    try {
-      const SpeechRecognition = window.webkitSpeechRecognition || window.SpeechRecognition;
-      const recognition = new SpeechRecognition();
+    
+    if (recognitionRef.current && !isListening) {
+      setTranscript('');
+      setError(null);
+      setIsListening(true);
       
-      recognition.lang = language;
-      recognition.continuous = false;
-      recognition.interimResults = false;
-      recognition.maxAlternatives = 1;
-
-      recognition.onstart = () => {
-        setIsListening(true);
-        setError(null);
-        console.log('🎤 Начало распознавания речи...');
-      };
-
-      recognition.onresult = (event) => {
-        const result = event.results[0][0];
-        const text = result.transcript;
-        const confidence = result.confidence;
-        
-        console.log('✅ Распознано:', text, `(уверенность: ${(confidence * 100).toFixed(1)}%)`);
-        setTranscript(text);
-        onResult(text, confidence);
-      };
-
-      recognition.onerror = (event) => {
-        console.error('❌ Ошибка распознавания:', event.error);
+      try {
+        recognitionRef.current.start();
+        console.log('🎤 Started listening...');
+      } catch (err) {
+        console.error('🎤 Start error:', err);
+        setError(err.message);
         setIsListening(false);
-        
-        let errorMessage = 'Ошибка распознавания речи';
-        switch (event.error) {
-          case 'no-speech':
-            errorMessage = 'Речь не обнаружена. Попробуйте ещё раз.';
-            break;
-          case 'audio-capture':
-            errorMessage = 'Микрофон не найден или недоступен.';
-            break;
-          case 'not-allowed':
-            errorMessage = 'Доступ к микрофону запрещён. Разрешите в настройках браузера.';
-            break;
-          case 'network':
-            errorMessage = 'Ошибка сети. Проверьте подключение к интернету.';
-            break;
-        }
-        
-        setError(errorMessage);
-        onError?.(errorMessage);
-      };
-
-      recognition.onend = () => {
-        setIsListening(false);
-        console.log('🔴 Распознавание завершено');
-      };
-
-      recognition.start();
-      recognitionRef.current = recognition;
-    } catch (err) {
-      console.error('❌ Ошибка инициализации:', err);
-      setError('Не удалось инициализировать распознавание речи');
-      setIsListening(false);
+        if (onError) onError(err.message);
+      }
     }
-  }, [isSupported, language, onResult, onError]);
+  }, [isSupported, isListening, onError]);
 
+  // Остановить прослушивание
   const stopListening = useCallback(() => {
-    if (recognitionRef.current) {
+    if (recognitionRef.current && isListening) {
       recognitionRef.current.stop();
+      setIsListening(false);
+      console.log('🎤 Stopped listening');
     }
-  }, []);
+  }, [isListening]);
 
   return {
     isListening,
@@ -99,4 +114,4 @@ export const useVoiceInput = (onResult, onError = null, language = 'ru-RU') => {
     startListening,
     stopListening
   };
-};
+}

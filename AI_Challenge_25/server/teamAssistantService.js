@@ -4,6 +4,8 @@ import { callGitTool } from './gitMcpClient.js';
 import { answerWithRagViaMcp } from './ragService.js';
 import localLlmClient from './localLlmClient.js';
 import userPersonalizationService from './userPersonalizationService.js';
+import { callDockerTool } from './mcpClient.js';
+
 
 // ═══════════════════════════════════════════════════════════════════
 // 🛡️ SAFE MCP RESPONSE PARSER
@@ -183,7 +185,8 @@ const title = titleMatch
       tools: ['git_mcp'] 
     };
   }
-  
+
+
 // ═══════════════════════════════════════════════════════════════════
 // 🚨 ПРИОРИТЕТ 5: Локальная LLM
 // ═══════════════════════════════════════════════════════════════════
@@ -206,7 +209,55 @@ if (lowerQuery.includes('спроси локальн') ||
     tools: ['local_llm']
   };
 }
-
+// ═══════════════════════════════════════════════════════════════════
+// 🚨 ПРИОРИТЕТ 5.5: Docker команды
+// ═══════════════════════════════════════════════════════════════════
+if (lowerQuery.includes('контейнер') || lowerQuery.includes('docker')) {
+  // Останов контейнера
+  if (lowerQuery.includes('останов') || lowerQuery.includes('stop')) {
+    const nameMatch = query.match(/(postgres|ollama|backend|frontend)[\w-]*/i);
+    if (nameMatch) {
+      return {
+        action: 'docker_stop',
+        params: { container: nameMatch[0] },
+        tools: ['docker_mcp']
+      };
+    }
+  }
+  
+  // Список контейнеров
+  if (lowerQuery.includes('список') || lowerQuery.includes('запущен') || lowerQuery === 'docker ps') {
+    return {
+      action: 'docker_list',
+      params: {},
+      tools: ['docker_mcp']
+    };
+  }
+}
+// ═══════════════════════════════════════════════════════════════════
+// 🚨 ПРИОРИТЕТ 5.5: Docker STOP команда
+// ═══════════════════════════════════════════════════════════════════
+if (lowerQuery.includes('останов') && (lowerQuery.includes('контейнер') || lowerQuery.includes('docker'))) {
+  // Парсим имя контейнера
+  const nameMatch = query.match(/(postgres|ollama|backend|frontend|perplexity)[\w-]*/i);
+  
+  if (nameMatch) {
+    const containerName = nameMatch[0];
+    console.log(`[Intent] Docker stop: ${containerName}`);
+    return {
+      action: 'docker_stop',
+      params: { container: containerName },
+      tools: ['docker_mcp']
+    };
+  }
+  
+  // Если не нашли конкретное имя - спросим у Docker MCP список
+  return {
+    action: 'docker_stop_interactive',
+    params: { pattern: 'postgres' },
+    tools: ['docker_mcp']
+  };
+}
 
   // ═══════════════════════════════════════════════════════════════════
   // 🚨 ПРИОРИТЕТ 6: RAG запросы
@@ -484,6 +535,7 @@ export async function processTeamQuery(
         break;
       }
 
+
       // ────────────────────────────────────────────────────────────
       // СТАТУС ПРОЕКТА
       // ────────────────────────────────────────────────────────────
@@ -560,6 +612,79 @@ export async function processTeamQuery(
         result.answer = ragResult.answer || ragResult.combinedAnswer || 'Ответ найден в документации.';
         break;
       }
+// ────────────────────────────────────────────────────────────
+// DOCKER COMMANDS
+// ────────────────────────────────────────────────────────────
+case 'docker_stop': {
+  const { container } = intent.params;
+  try {
+    // Вызываем Docker MCP tool
+    const result = await callDockerTool('stop_container', { name: container });
+    const parsed = parseMcpResponse(result, 'Docker MCP');
+    result.answer = `✅ Контейнер **${container}** остановлен.`;
+  } catch (error) {
+    result.answer = `❌ Ошибка остановки контейнера: ${error.message}`;
+  }
+  break;
+}
+
+case 'docker_list': {
+  try {
+    const dockerResult = await callDockerTool('list_containers', {});
+    const containers = parseMcpResponse(dockerResult, 'Docker MCP');
+    result.containers = containers;
+    result.answer = `Запущено **${containers.length}** контейнеров.`;
+  } catch (error) {
+    result.answer = `❌ Ошибка получения списка: ${error.message}`;
+  }
+  break;
+}
+case 'docker_stop': {
+  const { container } = intent.params;
+  try {
+    const stopResult = await callDockerTool('stop_container', { name: container });
+    const parsed = parseMcpResponse(stopResult, 'Docker MCP');
+    result.docker = parsed;
+    result.answer = `✅ Контейнер **${container}** остановлен.`;
+  } catch (error) {
+    console.error('[docker_stop] Error:', error.message);
+    result.answer = `❌ Ошибка остановки контейнера **${container}**: ${error.message}`;
+  }
+  break;
+}
+
+case 'docker_stop_interactive': {
+  const { pattern } = intent.params;
+  try {
+    // Сначала получаем список
+    const listResult = await callDockerTool('list_containers', {});
+    const containers = parseMcpResponse(listResult, 'Docker MCP');
+    
+    // Фильтруем по паттерну
+    const matching = containers.filter(c => 
+      c.name.toLowerCase().includes(pattern.toLowerCase())
+    );
+    
+    if (matching.length === 0) {
+      result.answer = `❌ Контейнеры с именем **${pattern}** не найдены.`;
+    } else if (matching.length === 1) {
+      // Останавливаем единственный найденный
+      const stopResult = await callDockerTool('stop_container', { name: matching[0].name });
+      result.answer = `✅ Контейнер **${matching[0].name}** остановлен.`;
+    } else {
+      // Несколько контейнеров - показываем список
+      result.containers = matching;
+      result.answer = `Найдено **${matching.length}** контейнеров:\n\n${
+        matching.map(c => `- **${c.name}** (${c.state})`).join('\n')
+      }\n\nУточни какой именно остановить.`;
+    }
+  } catch (error) {
+    result.answer = `❌ Ошибка: ${error.message}`;
+  }
+  break;
+}
+
+
 
       default: {
         result.answer = 'Я пока не знаю, как обработать этот запрос. Попробуй переформулировать.';
@@ -567,36 +692,60 @@ export async function processTeamQuery(
       }
     }
 
-     // 🎯 ПЕРСОНАЛИЗАЦИЯ + ВЫЗОВ PERPLEXITY ДЛЯ ФИНАЛЬНОГО ТЕКСТА
+       // 🎯 ПЕРСОНАЛИЗАЦИЯ + ВЫБОР LLM
     let baseSystemPrompt =
       'Ты — ассистент разработчика, помогаешь с технической помощью, анализом кода и архитектурой.';
-
     let finalSystemPrompt = baseSystemPrompt;
     let profileMetadata = null;
 
     if (personalizationEnabled && userId) {
       const systemPromptFromProfile = userPersonalizationService.getSystemPromptForQuery(userId, query);
       profileMetadata = userPersonalizationService.getProfileMetadata(userId);
-
       if (systemPromptFromProfile) {
         finalSystemPrompt = `${baseSystemPrompt}\n\n${systemPromptFromProfile}`;
       }
     }
 
     const summaryJson = JSON.stringify(result, null, 2);
-    const llmAnswer = await callPerplexityWithSystemPrompt(
-      finalSystemPrompt,
-      query,
-      summaryJson
-    );
+    let llmAnswer;
+
+    // 🔥 ВЫБОР LLM НА ОСНОВЕ llmMode
+    if (llmMode === 'ollama') {
+      console.log('[Team Assistant] 🏠 Using Ollama (local LLM)');
+      
+      // Формируем промпт с контекстом
+      const contextPrompt = `${finalSystemPrompt}\n\nВопрос: ${query}\n\nКонтекст:\n${summaryJson}\n\nОтветь кратко и по делу на русском языке.`;
+      
+      llmAnswer = await localLlmClient.chat(contextPrompt, {
+        system: finalSystemPrompt,
+        temperature: 0.7,
+        top_p: 0.9,
+      });
+    } else if (llmMode === 'perplexity') {
+      console.log('[Team Assistant] 🌐 Using Perplexity API');
+      llmAnswer = await callPerplexityWithSystemPrompt(
+        finalSystemPrompt,
+        query,
+        summaryJson
+      );
+    } else {
+      console.warn(`[Team Assistant] ⚠️ Unknown llmMode: ${llmMode}, defaulting to Ollama`);
+      const contextPrompt = `${finalSystemPrompt}\n\nВопрос: ${query}\n\nКонтекст:\n${summaryJson}\n\nОтветь кратко и по делу на русском языке.`;
+      llmAnswer = await localLlmClient.chat(contextPrompt, {
+        system: finalSystemPrompt,
+        temperature: 0.7,
+      });
+    }
 
     result.answer = llmAnswer || result.answer;
     result.personalized = Boolean(personalizationEnabled && profileMetadata);
     result.personalizationProfile = profileMetadata?.name || null;
-    result.llmUsed = llmMode; // покажет "perplexity" в UI, если ты его передал
+    result.llmUsed = llmMode;
+    result.timestamp = new Date().toISOString(); // 🔥 ДОБАВИЛ TIMESTAMP
 
-    console.log('[Team Assistant] ✅ Success (Perplexity with personalization)');
+    console.log(`[Team Assistant] ✅ Success (${llmMode} with ${personalizationEnabled ? 'personalization' : 'no personalization'})`);
     return result;
+
   } catch (error) {
     console.error('[Team Assistant] ❌ Error:', error);
     return {
@@ -604,6 +753,9 @@ export async function processTeamQuery(
       error: error.message || 'Unknown error in Team Assistant',
       answer: 'Произошла ошибка при обработке запроса команды.',
       llmUsed: llmMode,
+      timestamp: new Date().toISOString(), // 🔥 И здесь timestamp
     };
   }
 }
+
+

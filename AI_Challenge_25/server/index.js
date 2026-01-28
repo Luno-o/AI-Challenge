@@ -5,6 +5,7 @@ import { execSync } from 'child_process';
 
 import cors from 'cors';
 import userPersonalizationService from './userPersonalizationService.js';
+import { processDockerCommand, getDockerCommands } from './dockerChatService.js';
 import { analyticsChat } from "./analyticsChatService.js";
 import { analyzeData } from "./analyticsService.js";
 import { reviewPullRequest } from './prReviewService.js';
@@ -17,13 +18,16 @@ import { processTeamQuery } from './teamAssistantService.js';
 import { listPullRequests, getPullRequest } from './githubService.js';
 import { OLLAMA_MODELS, TASK_PRESETS } from './ollamaConfig.js';
 import { PROMPT_TEMPLATES, SYSTEM_PROMPTS } from './promptTemplates.js';
-import { callDockerTool, listDockerTools } from './mcpClient.js';
+import { 
+  getDockerMcpClient,  // 🆕
+  getTaskMcpClient,callDockerTool,
+   listDockerTools } from './mcpClient.js';
 import {
   orchestrateSetupTestEnv,
   orchestrateDeployApp,
   orchestrateCleanupEnvironment
 } from './agent-orchestrator.js';
-import { callTaskTool, listTaskTools, callGitHubTool, listGitHubTools } from './mcpClient.js';
+import { callTaskTool, listTaskTools } from './mcpClient.js';
 import { orchestrateSummaryChain } from './agent-orchestrator.js';
 import {
   answerWithoutRag,
@@ -92,6 +96,85 @@ return res.status(400).json({ error: 'user_id и question обязательны
 const result = await processUserQuestion(user_id, question);
 res.json(result);
 });
+
+
+// ✅ MCP initialization
+initGitMcpClient().catch(console.error);
+
+// 🆕 Инициализация всех MCP клиентов
+(async () => {
+  try {
+    console.log('🔌 Initializing MCP clients...');
+    
+    // Docker MCP
+    const dockerClient = await getDockerMcpClient();
+    if (!dockerClient.mock) {
+      console.log('✅ Docker MCP initialized');
+      const tools = await listDockerTools();
+      console.log(`   Available tools: ${tools.map(t => t.name).join(', ')}`);
+    } else {
+      console.warn('⚠️ Docker MCP running in MOCK mode');
+    }
+    
+    // Task MCP (если есть)
+    const taskClient = await getTaskMcpClient();
+    if (!taskClient.mock) {
+      console.log('✅ Task MCP initialized');
+    }
+    
+    
+  } catch (error) {
+    console.error('❌ MCP initialization error:', error.message);
+  }
+})();
+
+
+// ========== DOCKER CHAT API ==========
+
+/**
+ * POST /api/docker/chat - Обработка Docker команд из чата
+ */
+app.post('/api/docker/chat', async (req, res) => {
+  try {
+    const { message } = req.body;
+    
+    if (!message || typeof message !== 'string') {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'message is required' 
+      });
+    }
+
+    console.log(`[API /docker/chat] Message: "${message}"`);
+    
+    const result = await processDockerCommand(message);
+    
+    res.json(result);
+  } catch (error) {
+    console.error('[API /docker/chat] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/docker/commands - Список доступных Docker команд
+ */
+app.get('/api/docker/commands', async (req, res) => {
+  try {
+    const result = await getDockerCommands();
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+
 
 // Добавьте новые роуты
 // 🤖 Local LLM API

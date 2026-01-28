@@ -1,16 +1,26 @@
+// server/mcpClient.js
+
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // ===== TASK MCP CLIENT =====
-
 let taskClient = null;
 
 export async function getTaskMcpClient() {
   if (taskClient) return taskClient;
+
   try {
+    const serverPath = path.join(__dirname, 'task-mcp-server.js');
+    console.log(`📋 Starting Task MCP: ${serverPath}`);
+
     const transport = new StdioClientTransport({
       command: "node",
-      args: ["task-mcp-server.js"],
+      args: [serverPath],
       env: { ...process.env }
     });
 
@@ -23,8 +33,10 @@ export async function getTaskMcpClient() {
     console.log("✅ Task MCP Client connected");
   } catch (e) {
     console.warn("⚠️ Task MCP not available, using mock mode");
+    console.warn(`   Reason: ${e.message}`);
     taskClient = { mock: true };
   }
+
   return taskClient;
 }
 
@@ -34,7 +46,7 @@ export async function callTaskTool(toolName, params = {}) {
     if (client?.mock) {
       return { success: true, message: `Mock: ${toolName} called`, data: params };
     }
-    
+
     console.log(`🔧 Calling task tool: ${toolName}`);
     const result = await client.callTool({
       name: toolName,
@@ -58,9 +70,8 @@ export async function callTaskTool(toolName, params = {}) {
 export async function listTaskTools() {
   try {
     const client = await getTaskMcpClient();
-    if (client?.mock) {
-      return [];
-    }
+    if (client?.mock) return [];
+
     const result = await client.listTools();
     return result.tools || [];
   } catch (e) {
@@ -69,84 +80,19 @@ export async function listTaskTools() {
   }
 }
 
-// ===== GITHUB MCP CLIENT =====
-
-let githubClient = null;
-
-export async function getGitHubMcpClient() {
-  if (githubClient) return githubClient;
-  try {
-    const transport = new StdioClientTransport({
-      command: "node",
-      args: ["github-mcp-server.js"],
-      env: { ...process.env }
-    });
-
-    githubClient = new Client(
-      { name: "github-client", version: "1.0.0" },
-      { capabilities: {} }
-    );
-
-    await githubClient.connect(transport);
-    console.log("✅ GitHub MCP Client connected");
-  } catch (e) {
-    console.warn("⚠️ GitHub MCP not available, using mock mode");
-    githubClient = { mock: true };
-  }
-  return githubClient;
-}
-
-export async function callGitHubTool(toolName, params = {}) {
-  try {
-    const client = await getGitHubMcpClient();
-    if (client?.mock) {
-      return { success: true, message: `Mock: ${toolName} called`, data: params };
-    }
-
-    console.log(`🔧 Calling GitHub tool: ${toolName}`);
-    const result = await client.callTool({
-      name: toolName,
-      arguments: JSON.parse(JSON.stringify(params || {}))
-    });
-
-    if (result?.content?.[0]?.type === "text") {
-      try {
-        return JSON.parse(result.content[0].text);
-      } catch {
-        return { result: result.content[0].text };
-      }
-    }
-    return result;
-  } catch (e) {
-    console.error(`❌ GitHub tool error: ${e.message}`);
-    return { success: false, error: e.message };
-  }
-}
-
-export async function listGitHubTools() {
-  try {
-    const client = await getGitHubMcpClient();
-    if (client?.mock) {
-      return [];
-    }
-    const result = await client.listTools();
-    return result.tools || [];
-  } catch (e) {
-    console.error("❌ List GitHub tools error:", e.message);
-    return [];
-  }
-}
-
 // ===== DOCKER MCP CLIENT =====
-
 let dockerClient = null;
 
 export async function getDockerMcpClient() {
   if (dockerClient) return dockerClient;
+
   try {
+    const serverPath = path.join(__dirname, 'docker-mcp-server.js');
+    console.log(`🐳 Starting Docker MCP: ${serverPath}`);
+
     const transport = new StdioClientTransport({
       command: "node",
-      args: ["docker-mcp-server.js"],
+      args: [serverPath],
       env: { ...process.env }
     });
 
@@ -159,14 +105,17 @@ export async function getDockerMcpClient() {
     console.log("✅ Docker MCP Client connected");
   } catch (e) {
     console.warn("⚠️ Docker MCP not available, using mock mode");
+    console.warn(`   Reason: ${e.message}`);
     dockerClient = { mock: true };
   }
+
   return dockerClient;
 }
 
 export async function callDockerTool(toolName, params = {}) {
   try {
     const client = await getDockerMcpClient();
+    
     if (client?.mock) {
       // Return mock docker responses
       if (toolName === 'list_containers') {
@@ -205,13 +154,20 @@ export async function callDockerTool(toolName, params = {}) {
 export async function listDockerTools() {
   try {
     const client = await getDockerMcpClient();
+    
     if (client?.mock) {
       return [
         { name: "list_containers", description: "List Docker containers" },
         { name: "start_container", description: "Start a container" },
-        { name: "stop_container", description: "Stop a container" }
+        { name: "stop_container", description: "Stop a container" },
+        { name: "remove_container", description: "Remove a container" },
+        { name: "create_test_env", description: "Create test environment" },
+        { name: "health_check", description: "Health check container" },
+        { name: "get_logs", description: "Get container logs" },
+        { name: "cleanup_old_containers", description: "Cleanup old containers" }
       ];
     }
+
     const result = await client.listTools();
     return result.tools || [];
   } catch (e) {
@@ -221,7 +177,6 @@ export async function listDockerTools() {
 }
 
 // ===== CLOSE ALL CLIENTS =====
-
 export async function closeMcpClients() {
   if (taskClient && !taskClient.mock) {
     try {
@@ -231,16 +186,6 @@ export async function closeMcpClients() {
       console.error("Error closing Task:", e.message);
     }
     taskClient = null;
-  }
-
-  if (githubClient && !githubClient.mock) {
-    try {
-      await githubClient.close();
-      console.log("✅ GitHub MCP closed");
-    } catch (e) {
-      console.error("Error closing GitHub:", e.message);
-    }
-    githubClient = null;
   }
 
   if (dockerClient && !dockerClient.mock) {

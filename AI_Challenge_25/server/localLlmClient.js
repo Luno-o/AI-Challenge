@@ -1,3 +1,4 @@
+// server/localLlmClient.js
 import axios from 'axios';
 import { OLLAMA_MODELS, TASK_PRESETS } from './ollamaConfig.js';
 import { SYSTEM_PROMPTS } from './promptTemplates.js';
@@ -6,18 +7,18 @@ class LocalLlmClient {
   constructor() {
     this.baseUrl = process.env.OLLAMA_URL || 'http://localhost:11434';
     this.model = process.env.OLLAMA_MODEL || 'gemma2:2b';
-      console.log(
-    "[Local LLM init] OLLAMA_URL=",
-    process.env.OLLAMA_URL,
-    "OLLAMA_MODEL=",
-    process.env.OLLAMA_MODEL,
-    "-> using model",
-    this.model
-  );
+    console.log(
+      "[Local LLM init] OLLAMA_URL=",
+      process.env.OLLAMA_URL,
+      "OLLAMA_MODEL=",
+      process.env.OLLAMA_MODEL,
+      "-> using model",
+      this.model
+    );
     this.defaultConfig = OLLAMA_MODELS[this.model]?.recommended || {};
   }
 
-  // Основной метод чата с расширенными опциями
+  // 🔥 ИСПРАВЛЕННЫЙ метод чата (теперь использует /api/chat)
   async chat(prompt, options = {}) {
     const {
       temperature,
@@ -33,7 +34,7 @@ class LocalLlmClient {
 
     // Применяем preset если указан
     const presetConfig = preset ? TASK_PRESETS[preset] : {};
-    
+
     // Объединяем конфигурации (приоритет: options > preset > default)
     const config = {
       temperature: temperature ?? presetConfig.temperature ?? this.defaultConfig.temperature ?? 0.7,
@@ -49,11 +50,15 @@ class LocalLlmClient {
     console.log(`[Local LLM] Model: ${this.model}, Preset: ${preset || 'none'}, Config:`, config);
 
     try {
+      // 🔥 ИСПОЛЬЗУЕМ /api/chat вместо /api/generate
       const response = await axios.post(
-        `${this.baseUrl}/api/generate`,
+        `${this.baseUrl}/api/chat`,
         {
           model: this.model,
-          prompt: `${systemPrompt}\n\nUser: ${prompt}\n\nAssistant:`,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: prompt }
+          ],
           stream: false,
           options: config
         },
@@ -63,24 +68,29 @@ class LocalLlmClient {
         }
       );
 
-      return response.data.response;
+      // 🔥 Извлекаем ответ из нового формата
+      return response.data.message?.content || '';
+
     } catch (error) {
       console.error('[Local LLM] Error:', error.message);
       throw new Error(`Failed to query local LLM: ${error.message}`);
     }
   }
 
-  // Streaming ответ
+  // 🔥 ИСПРАВЛЕННЫЙ Streaming ответ
   async *chatStream(prompt, options = {}) {
     const config = this._buildConfig(options);
     const systemPrompt = options.system ?? SYSTEM_PROMPTS.assistant;
 
     try {
       const response = await axios.post(
-        `${this.baseUrl}/api/generate`,
+        `${this.baseUrl}/api/chat`,
         {
           model: this.model,
-          prompt: `${systemPrompt}\n\nUser: ${prompt}\n\nAssistant:`,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: prompt }
+          ],
           stream: true,
           options: config
         },
@@ -92,8 +102,8 @@ class LocalLlmClient {
 
       for await (const chunk of response.data) {
         const data = JSON.parse(chunk.toString());
-        if (data.response) {
-          yield data.response;
+        if (data.message?.content) {
+          yield data.message.content;
         }
       }
     } catch (error) {
@@ -152,13 +162,11 @@ class LocalLlmClient {
   // Сравнить разные конфигурации
   async compareConfigs(prompt, configs) {
     const results = [];
-    
     for (const config of configs) {
       const startTime = Date.now();
       try {
         const response = await this.chat(prompt, config);
         const endTime = Date.now();
-        
         results.push({
           config: config.name || JSON.stringify(config),
           response,
@@ -173,7 +181,6 @@ class LocalLlmClient {
         });
       }
     }
-    
     return results;
   }
 
@@ -181,7 +188,6 @@ class LocalLlmClient {
   _buildConfig(options) {
     const { preset, ...customOptions } = options;
     const presetConfig = preset ? TASK_PRESETS[preset] : {};
-    
     return {
       temperature: customOptions.temperature ?? presetConfig.temperature ?? this.defaultConfig.temperature ?? 0.7,
       top_p: customOptions.top_p ?? presetConfig.top_p ?? this.defaultConfig.top_p ?? 0.9,

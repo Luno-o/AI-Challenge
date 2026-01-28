@@ -1,4 +1,5 @@
-#!/usr/bin/env node
+
+
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
@@ -15,44 +16,94 @@ const DOCKER_LOG = path.join(__dirname, 'docker-operations.log');
 // ===== DOCKER CONNECTION =====
 let docker;
 
-if (os.platform() === 'win32') {
-  console.error('🐳 Windows detected, connecting via pipe: //./pipe/docker_engine');
-  docker = new Docker({
-    socketPath: '//./pipe/docker_engine'
-  });
+// Определение Docker connection
+if (process.env.DOCKER_HOST) {
+  const dockerHost = process.env.DOCKER_HOST;
+  console.error(`🐳 Using DOCKER_HOST: ${dockerHost}`);
+  
+  // Если unix socket
+  if (dockerHost.startsWith('unix://')) {
+    const socketPath = dockerHost.replace('unix://', '');
+    console.error(`🐳 Connecting via socket: ${socketPath}`);
+    docker = new Docker({ socketPath });
+  } 
+  // Если TCP
+  else if (dockerHost.startsWith('tcp://')) {
+    const url = new URL(dockerHost);
+    console.error(`🐳 Connecting via TCP: ${url.hostname}:${url.port}`);
+    docker = new Docker({
+      host: url.hostname,
+      port: url.port || 2375
+    });
+  }
+  // Прямой путь к socket
+  else if (dockerHost.startsWith('/')) {
+    console.error(`🐳 Connecting via socket path: ${dockerHost}`);
+    docker = new Docker({ socketPath: dockerHost });
+  }
+  // Хост без протокола
+  else {
+    console.error(`🐳 Connecting via host: ${dockerHost}`);
+    docker = new Docker({ host: dockerHost, port: 2375 });
+  }
+} else if (os.platform() === 'win32') {
+  console.error('🐳 Windows detected, connecting via pipe');
+  docker = new Docker({ socketPath: '//./pipe/docker_engine' });
 } else {
-  console.error('🐳 Unix detected, connecting via socket: /var/run/docker.sock');
-  docker = new Docker();
+  console.error('🐳 Unix detected, using default socket');
+  docker = new Docker({ socketPath: '/var/run/docker.sock' });
 }
 
+// ===== HELPER FUNCTIONS =====
+
+/**
+ * Инициализация директорий
+ */
 async function initDirs() {
-  await fs.mkdir(LOGS_DIR, { recursive: true });
+  try {
+    await fs.mkdir(LOGS_DIR, { recursive: true });
+    console.error('✅ Logs directory initialized');
+  } catch (error) {
+    console.error('⚠️ Failed to create logs dir:', error.message);
+  }
 }
 
+/**
+ * Логирование Docker операций
+ */
 async function logDockerOperation(operation, status, details) {
   const timestamp = new Date().toISOString();
   const message = `[${timestamp}] ${operation}: ${status} | ${JSON.stringify(details)}\n`;
+  
   try {
     await fs.appendFile(DOCKER_LOG, message);
   } catch (e) {
     console.error('Failed to log:', e.message);
   }
+  
   console.error(`🐳 ${operation}: ${status}`);
 }
 
+/**
+ * Health check контейнера
+ */
 async function healthCheck(containerId, maxWait = 30, retries = 3) {
   console.error(`🏥 Health checking container ${containerId.substring(0, 12)}...`);
+  
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       const container = docker.getContainer(containerId);
       const data = await container.inspect();
+      
       if (data.State.Running) {
         console.error(`✅ Container is running (attempt ${attempt}/${retries})`);
         return { success: true, status: 'running', data };
       }
+      
       if (attempt < retries) {
         await new Promise(resolve => setTimeout(resolve, maxWait * 1000));
       }
+      
     } catch (error) {
       console.error(`⚠️ Health check attempt ${attempt} failed: ${error.message}`);
       if (attempt < retries) {
@@ -60,9 +111,13 @@ async function healthCheck(containerId, maxWait = 30, retries = 3) {
       }
     }
   }
+  
   return { success: false, status: 'unhealthy', message: 'Max retries exceeded' };
 }
 
+/**
+ * Получить логи контейнера
+ */
 async function getContainerLogs(containerId, tail = 100) {
   try {
     const container = docker.getContainer(containerId);
@@ -76,7 +131,6 @@ async function getContainerLogs(containerId, tail = 100) {
     throw new Error(`Failed to get logs: ${error.message}`);
   }
 }
-
 const server = new Server(
   { name: "docker-manager", version: "1.0.0" },
   { capabilities: { tools: {} } }

@@ -1,98 +1,64 @@
-# docker-compose.yml
-# Убрана версия (устаревшая), исправлены порты и volumes
+version: '3.8'
 
 services:
-  # ========================================
-  # BACKEND (Node.js)
-  # ========================================
   backend:
     build:
       context: .
       dockerfile: Dockerfile
-      target: backend
     container_name: perplexity-chat-backend
     ports:
       - "5000:5000"
     environment:
-      - NODE_ENV=development
       - PORT=5000
-      - CORS_ORIGIN=http://localhost:5173
-      - OLLAMA_BASE_URL=http://ollama:11434
-      - PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY:-}
-      - PERSONALIZATION_ENABLED=true
-    networks:
-      - perplexity-network
+      - PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - GITHUB_OWNER=${GITHUB_OWNER}
+      - GITHUB_REPO=${GITHUB_REPO}
+      - GITHUB_BRANCH=${GITHUB_BRANCH:-main}
+      - OLLAMA_URL=http://ollama:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-gemma3:4b}
+      - REPO_PATH=/repo
     volumes:
-      # Development: монтируем код для hot-reload
       - ./server:/app/server
-      - ./server/userProfiles:/app/server/userProfiles
-      # Исключаем node_modules (используем из контейнера)
-      - /app/server/node_modules
-    command: npm start
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5000/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 20s
+      - ./documents:/app/documents
+      - ./.env:/app/.env
+      # 🔥 ИСПРАВЛЕНИЕ: монтируем родительскую папку (репозиторий)
+      - ../:/repo
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - ollama
+    restart: unless-stopped
+    networks:
+      - chat-network
 
-  # ========================================
-  # FRONTEND (React + Vite)
-  # ========================================
   frontend:
     build:
-      context: .
+      context: ./client
       dockerfile: Dockerfile
-      target: frontend
     container_name: perplexity-chat-frontend
     ports:
-      - "5173:5173"
-    environment:
-      - VITE_API_URL=http://localhost:5000
-      - NODE_ENV=development
+      - "80:80"
     depends_on:
-      backend:
-        condition: service_healthy
+      - backend
+    restart: unless-stopped
     networks:
-      - perplexity-network
-    volumes:
-      # Development: монтируем код для hot-reload
-      - ./client:/app/client
-      - /app/client/node_modules
-    command: npm run dev -- --host 0.0.0.0 --port 5173
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5173"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+      - chat-network
 
-  # ========================================
-  # OLLAMA (Local LLM Server)
-  # ========================================
   ollama:
     image: ollama/ollama:latest
     container_name: perplexity-chat-ollama
     ports:
       - "11434:11434"
-    environment:
-      - OLLAMA_HOST=0.0.0.0:11434
-    networks:
-      - perplexity-network
     volumes:
       - ollama-data:/root/.ollama
-    command: serve
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:11434/api/tags"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-
-networks:
-  perplexity-network:
-    driver: bridge
+    restart: unless-stopped
+    networks:
+      - chat-network
 
 volumes:
+  # 🔥 Удалён repo-data (больше не нужен)
   ollama-data:
-    driver: local
+
+networks:
+  chat-network:
+    driver: bridge

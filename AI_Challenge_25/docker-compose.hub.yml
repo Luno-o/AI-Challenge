@@ -1,3 +1,6 @@
+# docker-compose.hub.yml
+# v1.5.1 - Production config with Git MCP support
+
 services:
   backend:
     image: luno2/perplexity-backend:latest
@@ -8,27 +11,42 @@ services:
       - NODE_ENV=production
       - PORT=4000
       - PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY}
-      - PERPLEXITY_MODEL=${PERPLEXITY_MODEL}
+      - PERPLEXITY_MODEL=${PERPLEXITY_MODEL:-sonar}
+      # 🆕 Git MCP
       - REPO_PATH=/app
-      - OLLAMA_URL=http://ollama:11434
-      - OLLAMA_MODEL=${OLLAMA_MODEL}
+      # 🆕 Ollama
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-gemma3:4b}
+      # 🆕 Voice Agent (optional)
+      - WHISPER_MODEL=whisper:base
+      - STT_PROVIDER=ollama
     volumes:
       - ./server/documents:/app/documents
       - ./server/indexes:/app/indexes
       - ./server/tasks.json:/app/tasks.json
       - ./server/logs:/app/logs
+      # 🆕 Профили персонализации
+      - ./server/userProfiles:/app/userProfiles
+      # 🆕 Git репозиторий (read-only)
+      - ./.git:/app/.git:ro
     depends_on:
       - ollama
     restart: unless-stopped
+    networks:
+      - perplexity-network
 
   frontend:
     image: luno2/perplexity-frontend:latest
     container_name: perplexity-frontend
     ports:
       - "80:80"
+    environment:
+      - VITE_API_URL=http://backend:4000
     depends_on:
       - backend
     restart: unless-stopped
+    networks:
+      - perplexity-network
 
   ollama:
     image: ollama/ollama:latest
@@ -38,13 +56,27 @@ services:
     volumes:
       - ollama-data:/root/.ollama
     restart: unless-stopped
+    networks:
+      - perplexity-network
+    # 🆕 Автоматическая загрузка моделей при старте
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
         ollama serve &
-        sleep 5
+        sleep 10
+        echo "📥 Downloading models..."
         ollama pull ${OLLAMA_MODEL:-gemma3:4b}
+        ollama pull llama3.2:3b
+        ollama pull nomic-embed-text
+        # 🆕 Опционально: Whisper для Voice Agent (Вариант B)
+        # ollama pull whisper:base
+        echo "✅ Models ready"
         wait
+
+networks:
+  perplexity-network:
+    driver: bridge
 
 volumes:
   ollama-data:
+    driver: local

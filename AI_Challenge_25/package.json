@@ -1,19 +1,49 @@
 {
   "name": "team-assistant-monorepo",
-  "version": "1.1.1",
+  "version": "1.5.1",
+  "description": "MCP Server & Chat Integration with RAG + Local LLM + Voice Agent",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:server": "cd server && npm run dev",
     "dev:client": "cd client && npm run dev",
+    
     "deploy:check": "node deployment-pipeline-manager.js",
     "deploy:vercel": "cd client && vercel --prod",
     "deploy:railway": "cd server && railway up",
-    "docker:build": "cd server && docker build -t team-assistant .",
-    "docker:run": "docker run -p 4000:4000 --env-file server/.env team-assistant"
+    
+    "docker:build": "docker-compose build --no-cache",
+    "docker:up": "docker-compose up",
+    "docker:down": "docker-compose down",
+    "docker:restart": "npm run docker:down && npm run docker:up",
+    "docker:logs": "docker-compose logs -f",
+    "docker:logs:backend": "docker logs perplexity-chat-backend -f",
+    "docker:logs:frontend": "docker logs perplexity-chat-frontend -f",
+    "docker:clean": "docker-compose down -v && docker system prune -f",
+    
+    "docker:prod:build": "docker-compose -f docker-compose.hub.yml build",
+    "docker:prod:up": "docker-compose -f docker-compose.hub.yml up -d",
+    "docker:prod:down": "docker-compose -f docker-compose.hub.yml down",
+    
+    "ollama:pull": "docker exec perplexity-chat-ollama ollama pull gemma3:4b",
+    "ollama:list": "docker exec perplexity-chat-ollama ollama list",
+    "ollama:whisper": "docker exec perplexity-chat-ollama ollama pull whisper:base",
+    
+    "test:git": "docker exec perplexity-chat-backend node -e \"require('./gitMcpClient.js').callGitTool('get_current_branch').then(console.log)\"",
+    "test:health": "curl http://localhost:5000/api/health && curl http://localhost:5173"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
-  }
+  },
+  "keywords": [
+    "mcp",
+    "rag",
+    "ollama",
+    "voice-agent",
+    "git-integration",
+    "team-assistant"
+  ],
+  "author": "Luno-o",
+  "license": "MIT"
 }

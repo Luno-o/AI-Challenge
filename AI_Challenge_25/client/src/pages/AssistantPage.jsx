@@ -48,7 +48,7 @@ export default function AssistantPage() {
       if (prReviewMatch) {
         const prNumber = prReviewMatch[1];
         
-const response = await fetch(`http://localhost:4000/api/pr/review/${prNumber}`, {
+const response = await fetch(`http://localhost:5000/api/pr/review/${prNumber}`, {
   method: 'POST'  // ← Эта строка ДОЛЖНА быть!
 });
         const data = await response.json();
@@ -92,7 +92,7 @@ const response = await fetch(`http://localhost:4000/api/pr/review/${prNumber}`, 
           command.toLowerCase().includes('pull request') ||
           command.toLowerCase().includes('покажи pr')) {
         
-        const response = await fetch('http://localhost:4000/api/github/pulls');
+        const response = await fetch('http://localhost:5000/api/github/pulls');
         const data = await response.json();
 
         if (data.success) {
@@ -120,7 +120,7 @@ const response = await fetch(`http://localhost:4000/api/pr/review/${prNumber}`, 
       }
 
       // Остальные Assistant команды (/help, /code, /review)
-      const response = await fetch('http://localhost:4000/api/assistant/command', {
+      const response = await fetch('http://localhost:5000/api/assistant/command', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ command })

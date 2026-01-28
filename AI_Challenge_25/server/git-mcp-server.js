@@ -17,7 +17,7 @@ function runGitCommand(command, options = {}) {
       encoding: 'utf-8',
       maxBuffer: 10 * 1024 * 1024,
       // ✅ Исправление для Windows: используем cmd.exe вместо bash
-      shell: process.platform === 'win32' ? 'cmd.exe' : '/bin/bash',
+      shell: process.platform === 'win32' ? 'cmd.exe' : '/bin/sh',
       ...options,
     });
     return result.trim();
